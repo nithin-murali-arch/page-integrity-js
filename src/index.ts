@@ -8,7 +8,6 @@
 
 import { PageIntegrityConfig, BlockedEventInfo } from './types';
 import { ScriptBlocker } from './script-blocking';
-import { MutationMonitor } from './mutation-monitor';
 
 // Types
 export type MutationType = 'insert' | 'update' | 'remove';
@@ -75,31 +74,26 @@ export interface AllowedMutations {
  *   whitelistedHosts: ['trusted.com'],
  *   onBlocked: (info) => { ... }
  * });
- * pi.start();
  * ```
  */
 export class PageIntegrity {
   private config: PageIntegrityConfig;
   private scriptBlocker: ScriptBlocker;
-  private mutationMonitor: MutationMonitor;
 
   /**
    * Create a new PageIntegrity instance.
    * @param config Configuration options for script and DOM mutation monitoring.
    */
-  constructor(config: PageIntegrityConfig = {}) {
+  constructor(config: PageIntegrityConfig) {
     this.config = {
       allowDynamicInline: true,
       ...config
     };
-    if (!('allowedMutations' in this.config)) {
-      // If not provided, leave as undefined (all elements allowed)
-      delete (this.config as any).allowedMutations;
-    }
     this.scriptBlocker = new ScriptBlocker(this.config);
     this.scriptBlocker.setupBlocking();
-    this.mutationMonitor = new MutationMonitor(this.config);
-    this.start();
+    if (typeof window !== 'undefined') {
+      (window as any).PageIntegrity = PageIntegrity;
+    }
   }
 
   /**
@@ -110,22 +104,13 @@ export class PageIntegrity {
     this.config = { ...this.config, ...newConfig };
     this.scriptBlocker.updateConfig(this.config);
     this.scriptBlocker.setupBlocking();
-    this.mutationMonitor.updateConfig(this.config);
-    this.start();
-  }
-
-  /**
-   * Start monitoring the page for unauthorized scripts and DOM mutations.
-   */
-  public start(): void {
-    this.mutationMonitor.startMonitoring();
   }
 
   /**
    * Stop monitoring the page for unauthorized scripts and DOM mutations.
    */
   public stop(): void {
-    this.mutationMonitor.stopMonitoring();
+    // No longer needed as MutationMonitor is removed
   }
 }
 

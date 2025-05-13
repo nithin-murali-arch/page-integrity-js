@@ -1,4 +1,6 @@
 import { BlockedEventInfo, PageIntegrityConfig, ScriptSource } from './types';
+import { createHash } from './utils/hash';
+import { sendMessage } from './utils/message';
 
 export class ScriptBlocker {
   private config: PageIntegrityConfig;
@@ -36,24 +38,51 @@ export class ScriptBlocker {
     return this.config;
   }
 
-  // Monitor eval usage
   private monitorEval(): void {
     const self = this;
     const originalEval = window.eval;
     window.eval = function(...args: any[]) {
-      if (self.config.onBlocked) {
-        const stack = new Error().stack || '';
-        self.config.onBlocked({
-          type: 'dynamic-inline',
-          target: document.documentElement,
-          stackTrace: stack,
-          context: { source: 'eval' as any, origin: window.location.origin }
+      const evalContent = typeof args[0] === 'string' ? args[0] : '';
+      const hash = createHash(evalContent);
+      sendMessage({ type: 'getUrl', hash })
+        .then(response => {
+          const url = response.url;
+          if (url) {
+            const hostname = new URL(url).hostname;
+            if (self.whitelistedOrigins && self.whitelistedOrigins.has(hostname)) {
+              originalEval(evalContent);
+            } else if (self.blockedOrigins && self.blockedOrigins.has(hostname)) {
+              const stack = new Error().stack || '';
+              self.config.onBlocked?.({
+                type: 'blacklisted',
+                target: document.documentElement,
+                stackTrace: stack,
+                context: { source: 'eval', origin: url }
+              });
+            } else if (self.config.onBlocked) {
+              const stack = new Error().stack || '';
+              self.config.onBlocked({
+                type: 'unknown-origin',
+                target: document.documentElement,
+                stackTrace: stack,
+                context: { source: 'eval', origin: url }
+              });
+              originalEval(evalContent);
+            }
+          } else {
+            originalEval(evalContent);
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching URL:', error);
+          originalEval(evalContent);
         });
-      } else {
-        console.warn('Eval usage detected:', args);
-      }
-      return originalEval(typeof args[0] === 'string' ? args[0] : '');
     };
+  }
+
+  private extractScriptUrl(content: string): string | null {
+    const urlMatch = content.match(/https?:\/\/[^\s'"]+/);
+    return urlMatch ? urlMatch[0] : null;
   }
 
   public checkAndBlockScript(script: HTMLScriptElement): boolean {

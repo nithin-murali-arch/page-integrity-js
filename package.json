@@ -1,14 +1,31 @@
 {
   "name": "page-integrity-js",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "A library for monitoring and controlling DOM mutations and script execution",
+  "engines": {
+    "node": ">=16.0.0"
+  },
   "main": "dist/index.js",
+  "module": "dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./service-worker": {
+      "import": "./dist/service-worker.js",
+      "require": "./dist/service-worker.js"
+    }
+  },
   "types": "dist/index.d.ts",
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "npm run clean && npm run build:main && npm run build:sw && npm run build:iife",
+    "build:main": "tsc -p tsconfig.json",
+    "build:sw": "tsc -p tsconfig.sw.json",
+    "build:iife": "rollup -c",
     "test": "jest",
     "test:watch": "jest --watch",
     "clean": "rimraf dist",
@@ -24,11 +41,15 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-typescript": "^11.1.6",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.11.24",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "rimraf": "^5.0.0",
+    "rollup": "^4.15.0",
     "ts-jest": "^29.1.2",
     "typescript": "^5.3.3"
   }

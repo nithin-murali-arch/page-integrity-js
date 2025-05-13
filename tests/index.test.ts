@@ -1,6 +1,5 @@
 import { PageIntegrity } from '../src';
 import { ScriptBlocker } from '../src/script-blocking';
-import { MutationMonitor } from '../src/mutation-monitor';
 
 describe('PageIntegrity', () => {
   let pageIntegrity: PageIntegrity;
@@ -100,9 +99,14 @@ describe('PageIntegrity', () => {
   });
 
   describe('Configuration', () => {
-    it('should use default configuration when none provided', () => {
-      const defaultConfig = new PageIntegrity();
-      expect(defaultConfig).toBeDefined();
+    it('should use default configuration when none is provided', () => {
+      const config = {
+        whitelistedHosts: [],
+        blacklistedHosts: [],
+        onBlocked: jest.fn()
+      };
+      const defaultConfig = new PageIntegrity(config);
+      expect(defaultConfig).toBeInstanceOf(PageIntegrity);
     });
   });
 
@@ -197,5 +201,15 @@ describe('PageIntegrity', () => {
       expect(blockedEvents[0].type).toBe('unknown-origin');
       expect(document.querySelector('script')).not.toBeNull();
     });
+  });
+
+  it('should instantiate with a config', () => {
+    const config = {
+      whitelistedHosts: ['trusted.com'],
+      blacklistedHosts: ['evil.com'],
+      onBlocked: jest.fn()
+    };
+    const pi = new PageIntegrity(config);
+    expect(pi).toBeInstanceOf(PageIntegrity);
   });
 }); 

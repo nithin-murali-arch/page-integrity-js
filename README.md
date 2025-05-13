@@ -1,133 +1,95 @@
-# Page Integrity JS
+# Page Integrity
 
-A robust library for ensuring webpage content integrity by monitoring and controlling script execution and DOM mutations.
+A TypeScript library for monitoring and controlling script execution in web applications.
 
 ## Features
 
-- Block unauthorized script execution from blacklisted domains
-- Ignore scripts from whitelisted domains
-- Call a callback for scripts from unknown origins (not in whitelist or blacklist)
-- Monitor and control DOM mutations
-- Prevent unauthorized content modifications
-- Provide detailed reporting of blocked or suspicious events
-- Highly configurable security rules
+- Monitor and control script execution from various sources (inline, external, eval)
+- Service worker-based script content validation
+- Configurable whitelist and blacklist for script origins
+- Promise-based message handling
+- TypeScript support
 
 ## Installation
-
-### NPM
 
 ```bash
 npm install page-integrity-js
 ```
 
-### Browser
-
-```html
-<script type="module">
-  import { PageIntegrity } from 'path/to/page-integrity-js/dist/index.js';
-</script>
-```
-
 ## Usage
 
-### Basic Usage
+### Browser Usage
 
-```javascript
-// Initialize with default settings
-const pageIntegrity = new PageIntegrity();
-
-// Start monitoring
-pageIntegrity.start();
+1. Copy the service worker file to your public directory:
+```bash
+cp node_modules/page-integrity-js/dist/service-worker.js public/page-integrity-sw.js
 ```
 
-### Advanced Configuration
+2. Register the service worker:
 
 ```javascript
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/page-integrity-sw.js')
+    .then(registration => {
+      console.log('Service Worker registered:', registration);
+    })
+    .catch(error => {
+      console.error('Service Worker registration failed:', error);
+    });
+}
+```
+
+3. Initialize Page Integrity:
+
+```javascript
+import { PageIntegrity } from 'page-integrity-js';
+
 const pageIntegrity = new PageIntegrity({
-  // Enable strict mode (default: true)
-  strictMode: true,
-  
-  // List of blocked domains
-  blacklistedHosts: ['evil.com', 'malicious.com'],
-
-  // List of explicitly allowed domains
-  whitelistedHosts: ['trusted.com', 'cdn.example.com'],
-
-  // Allow dynamically added inline scripts (default: true)
-  allowDynamicInline: true,
-  
-  // Configure allowed mutations
-  allowedMutations: {
-    // Allowed element types
-    elementTypes: ['div', 'span', 'p', 'a', 'img'],
-    // Allowed attributes
-    attributes: ['class', 'style', 'src', 'href'],
-    // Regex patterns for allowed attributes
-    patterns: [/^data-.*/]
-  },
-  
-  // Callback for blocked or suspicious events
+  whitelistedHosts: ['trusted-domain.com'],
+  blacklistedHosts: ['malicious-domain.com'],
   onBlocked: (info) => {
-    if (info.type === 'unknown-origin') {
-      console.warn('Script from unknown origin:', info.context.origin);
-    } else {
-      console.warn('Blocked event:', info);
-    }
+    console.warn('Blocked script execution:', info);
   }
 });
 
 // Start monitoring
-pageIntegrity.start();
+pageIntegrity.setupBlocking();
 ```
 
-### Configuration Options
-
-- `strictMode`: Whether to enforce strict validation of all mutations
-- `blacklistedHosts`: List of blocked hosts that are not allowed to execute
-- `whitelistedHosts`: List of explicitly allowed hosts (ignored by the blocker)
-- `allowDynamicInline`: Whether to allow dynamically added inline scripts
-- `allowedMutations`: Configuration for allowed mutations
-  - `elementTypes`: Types of elements that can be modified
-  - `attributes`: Attributes that can be modified
-  - `patterns`: Regex patterns for allowed attributes
-- `onBlocked`: Callback function for blocked or suspicious events
-
-### Blocked Event Information
-
-The `onBlocked` callback receives an object with the following structure:
+### TypeScript Usage
 
 ```typescript
-interface BlockedEventInfo {
-  type: 'extension' | 'dynamic-inline' | 'mutation' | 'blacklisted' | 'unknown-origin' | 'eval';
-  target: Element | HTMLScriptElement;
-  stackTrace: string;
-  context: {
-    source?: ScriptSource;
-    origin?: string;
-    mutationType?: 'insert' | 'update' | 'remove';
-    scriptHash?: string;
-  };
-}
+import { PageIntegrity } from 'page-integrity-js';
+
+const pageIntegrity = new PageIntegrity({
+  whitelistedHosts: ['trusted-domain.com'],
+  blacklistedHosts: ['malicious-domain.com'],
+  onBlocked: (info) => {
+    console.warn('Blocked script execution:', info);
+  }
+});
+
+// Start monitoring
+pageIntegrity.setupBlocking();
 ```
 
-#### Event Types
-- `blacklisted`: Script from a blacklisted host was blocked
-- `unknown-origin`: Script from a host not in whitelist or blacklist (not blocked, but reported)
-- `dynamic-inline`: Inline script execution (if not allowed)
-- `mutation`: Disallowed DOM mutation
-- `eval`: Use of `eval()` detected
-- `extension`: Script from a browser extension
+## Configuration
 
-### Error Handling
-- Invalid or relative script URLs are ignored and do not trigger the callback.
-- Only absolute URLs (with protocol and hostname not matching the current page) are considered for unknown-origin reporting.
+The `PageIntegrity` constructor accepts a configuration object with the following options:
 
-## Browser Support
+- `whitelistedHosts`: Array of trusted hostnames
+- `blacklistedHosts`: Array of blocked hostnames
+- `onBlocked`: Callback function for blocked script execution
+- `skipCreateElementOverride`: Boolean to skip createElement override
 
-The library is compatible with modern browsers that support:
-- ES2015 (ES6)
-- ES Modules
-- MutationObserver API
+## Service Worker
+
+The library includes a service worker that intercepts and validates script content. The service worker:
+
+- Intercepts fetch, XHR, and script element requests
+- Generates content hashes for validation
+- Implements LRU caching for performance
+- Communicates with the main thread via message passing
 
 ## Development
 
@@ -135,12 +97,23 @@ The library is compatible with modern browsers that support:
 # Install dependencies
 npm install
 
-# Build the library
+# Build the project
 npm run build
 
 # Run tests
 npm test
 ```
+
+## Build Process
+
+The project uses two separate TypeScript configurations:
+- `tsconfig.json` for the main library
+- `tsconfig.sw.json` for the service worker
+
+The build process:
+1. Cleans the dist directory
+2. Builds the main library
+3. Builds the service worker
 
 ## License
 

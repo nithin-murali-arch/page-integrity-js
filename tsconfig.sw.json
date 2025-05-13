@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2015",
     "module": "ES2015",
-    "lib": ["ES2015", "DOM", "DOM.Iterable"],
+    "lib": ["ES2015", "WebWorker"],
     "declaration": true,
     "outDir": "./dist",
     "strict": true,
@@ -13,7 +13,8 @@
     "sourceMap": true
   },
   "include": [
-    "src/**/*"
+    "src/service-worker.ts",
+    "src/utils/hash.ts"
   ],
   "exclude": ["node_modules", "dist"]
 } 

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Page Integrity JS Example</title>
+  <script src="../dist/page-integrity.js"></script>
+  <script>
+    // Configure PageIntegrity
+    window.pageIntegrityInstance = new window.PageIntegrity({
+      whitelistedHosts: ['trusted.com'],
+      blacklistedHosts: ['evil.com'],
+      onBlocked: function(event) {
+        const log = document.getElementById('log');
+        log.textContent += `Blocked: ${JSON.stringify(event)}\n`;
+      }
+    });
+  </script>
+</head>
+<body>
+  <h1>Page Integrity JS Example</h1>
+  <p>This page demonstrates script blocking and whitelisting.</p>
+  <pre id="log" style="background:#222;color:#0f0;padding:1em;"></pre>
+  <button onclick="addScript('https://evil.com/bad.js')">Add Blacklisted Script</button>
+  <button onclick="addScript('https://trusted.com/good.js')">Add Whitelisted Script</button>
+  <button onclick="addScript('https://unknown.com/neutral.js')">Add Unknown Script</button>
+  <button onclick="addInlineScript()">Add Inline Script</button>
+  <script>
+    function addScript(src) {
+      const s = document.createElement('script');
+      s.src = src;
+      document.body.appendChild(s);
+    }
+    function addInlineScript() {
+      const s = document.createElement('script');
+      s.textContent = 'document.getElementById("log").textContent += "Inline script ran!\\n";';
+      document.body.appendChild(s);
+    }
+  </script>
+</body>
+</html> 
