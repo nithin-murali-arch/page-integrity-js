@@ -1,227 +1,146 @@
 # Page Integrity JS
 
-A robust JavaScript library that ensures webpage content integrity by verifying that DOM mutations come from trusted sources. This library provides a comprehensive solution for protecting your web application from unauthorized content modifications.
+A robust library for ensuring webpage content integrity by monitoring and controlling script execution and DOM mutations.
 
 ## Features
 
-- **Script Registry**: Maintains a registry of all scripts with their hashes, origins, and dependencies
-- **Mutation Analysis**: Analyzes and validates DOM mutations against allowed patterns
-- **Trust Chain**: Builds a trust chain from script registration to mutation execution
-- **Dynamic Script Monitoring**: Tracks dynamically added scripts and their mutations
-- **Configurable Security**: Flexible configuration for different security requirements
-- **Detailed Reporting**: Comprehensive information about content modifications
-- **Extension Detection**: Identifies and blocks browser extension scripts
-- **First-Party Script Protection**: Allows legitimate first-party scripts while blocking unauthorized ones
-- **Debug Callbacks**: Detailed information about blocked events with stack traces
+- Block unauthorized script execution from blacklisted domains
+- Ignore scripts from whitelisted domains
+- Call a callback for scripts from unknown origins (not in whitelist or blacklist)
+- Monitor and control DOM mutations
+- Prevent unauthorized content modifications
+- Provide detailed reporting of blocked or suspicious events
+- Highly configurable security rules
 
 ## Installation
+
+### NPM
 
 ```bash
 npm install page-integrity-js
 ```
 
-## Quick Start
+### Browser
 
-```typescript
-import PageIntegrity from 'page-integrity-js';
+```html
+<script type="module">
+  import { PageIntegrity } from 'path/to/page-integrity-js/dist/index.js';
+</script>
+```
 
-// Initialize with configuration
+## Usage
+
+### Basic Usage
+
+```javascript
+// Initialize with default settings
+const pageIntegrity = new PageIntegrity();
+
+// Start monitoring
+pageIntegrity.start();
+```
+
+### Advanced Configuration
+
+```javascript
 const pageIntegrity = new PageIntegrity({
-  whitelistedHosts: ['https://trusted-cdn.com'],
+  // Enable strict mode (default: true)
   strictMode: true,
-  blockExtensions: true,
-  allowDynamicInline: false,
-  onBlocked: (info) => {
-    console.log('Blocked event:', {
-      type: info.type,
-      stackTrace: info.stackTrace,
-      context: info.context
-    });
-  },
+  
+  // List of blocked domains
+  blacklistedHosts: ['evil.com', 'malicious.com'],
+
+  // List of explicitly allowed domains
+  whitelistedHosts: ['trusted.com', 'cdn.example.com'],
+
+  // Allow dynamically added inline scripts (default: true)
+  allowDynamicInline: true,
+  
+  // Configure allowed mutations
   allowedMutations: {
-    elementTypes: ['div', 'span', 'p', 'a', 'img', 'button'],
-    attributes: ['class', 'style', 'src', 'href', 'alt'],
-    patterns: [/^data-[a-z-]+$/]
+    // Allowed element types
+    elementTypes: ['div', 'span', 'p', 'a', 'img'],
+    // Allowed attributes
+    attributes: ['class', 'style', 'src', 'href'],
+    // Regex patterns for allowed attributes
+    patterns: [/^data-.*/]
+  },
+  
+  // Callback for blocked or suspicious events
+  onBlocked: (info) => {
+    if (info.type === 'unknown-origin') {
+      console.warn('Script from unknown origin:', info.context.origin);
+    } else {
+      console.warn('Blocked event:', info);
+    }
   }
 });
 
-// Start monitoring DOM changes
-pageIntegrity.startMonitoring();
-
-// Get content updates for a specific element
-const updates = pageIntegrity.getContentUpdates(document.querySelector('#my-element'));
-
-// Get script registry
-const scriptRegistry = pageIntegrity.getScriptRegistry();
+// Start monitoring
+pageIntegrity.start();
 ```
 
-## Configuration Options
+### Configuration Options
 
-### whitelistedHosts
-Array of trusted hosts that are allowed to modify content. Must be valid HTTP/HTTPS URLs:
-```typescript
-whitelistedHosts: ['https://trusted-cdn.com', 'https://api.example.com']
-```
+- `strictMode`: Whether to enforce strict validation of all mutations
+- `blacklistedHosts`: List of blocked hosts that are not allowed to execute
+- `whitelistedHosts`: List of explicitly allowed hosts (ignored by the blocker)
+- `allowDynamicInline`: Whether to allow dynamically added inline scripts
+- `allowedMutations`: Configuration for allowed mutations
+  - `elementTypes`: Types of elements that can be modified
+  - `attributes`: Attributes that can be modified
+  - `patterns`: Regex patterns for allowed attributes
+- `onBlocked`: Callback function for blocked or suspicious events
 
-### strictMode
-When enabled, enforces strict validation of all mutations:
-```typescript
-strictMode: true // Default: false
-```
+### Blocked Event Information
 
-### blockExtensions
-When enabled, blocks scripts from browser extensions:
-```typescript
-blockExtensions: true // Default: true
-```
+The `onBlocked` callback receives an object with the following structure:
 
-### allowDynamicInline
-When enabled, allows dynamically added inline scripts:
-```typescript
-allowDynamicInline: false // Default: false
-```
-
-### onBlocked
-Callback function that receives information about blocked events:
-```typescript
-onBlocked: (info: BlockedEventInfo) => void
-```
-
-The callback receives an object with the following structure:
 ```typescript
 interface BlockedEventInfo {
-  /** Type of blocked event */
-  type: 'extension' | 'dynamic-inline' | 'mutation';
-  /** Target element or script that was blocked */
-  target: Element | HTMLScriptElement;
-  /** Stack trace of the blocked event */
-  stackTrace: string;
-  /** Additional context about the blocked event */
-  context: {
-    /** Source of the script if applicable */
-    source?: ScriptSource;
-    /** Origin of the script if applicable */
-    origin?: string;
-    /** Mutation type if applicable */
-    mutationType?: MutationType;
-    /** Script hash if applicable */
-    scriptHash?: string;
-  };
-}
-```
-
-### allowedMutations
-Configuration for allowed mutation types and attributes:
-```typescript
-allowedMutations: {
-  // Allowed HTML element types
-  elementTypes: ['div', 'span', 'p', 'a', 'img', 'button'],
-  // Allowed HTML attributes
-  attributes: ['class', 'style', 'src', 'href', 'alt'],
-  // Regex patterns for allowed attributes
-  patterns: [/^data-[a-z-]+$/]
-}
-```
-
-## API Reference
-
-### PageIntegrity
-
-#### constructor(config: PageIntegrityConfig)
-Creates a new PageIntegrity instance with the specified configuration.
-
-#### startMonitoring(): void
-Starts monitoring DOM changes for content integrity.
-
-#### getContentUpdates(element: Element): MutationInfo[]
-Returns an array of mutation information for the specified element.
-
-#### clearContentUpdates(): void
-Clears all recorded content updates.
-
-#### getConfig(): PageIntegrityConfig
-Returns the current configuration.
-
-#### getScriptRegistry(): Map<string, ScriptInfo>
-Returns the script registry containing information about all registered scripts.
-
-### Types
-
-#### PageIntegrityConfig
-```typescript
-interface PageIntegrityConfig {
-  strictMode?: boolean;
-  whitelistedHosts?: string[];
-  blockExtensions?: boolean;
-  allowDynamicInline?: boolean;
-  onBlocked?: (info: BlockedEventInfo) => void;
-  allowedMutations?: {
-    elementTypes: string[];
-    attributes: string[];
-    patterns: RegExp[];
-  };
-}
-```
-
-#### BlockedEventInfo
-```typescript
-interface BlockedEventInfo {
-  type: 'extension' | 'dynamic-inline' | 'mutation';
+  type: 'extension' | 'dynamic-inline' | 'mutation' | 'blacklisted' | 'unknown-origin' | 'eval';
   target: Element | HTMLScriptElement;
   stackTrace: string;
   context: {
     source?: ScriptSource;
     origin?: string;
-    mutationType?: MutationType;
+    mutationType?: 'insert' | 'update' | 'remove';
     scriptHash?: string;
   };
 }
 ```
 
-#### ScriptInfo
-```typescript
-interface ScriptInfo {
-  hash: string;
-  origin: string;
-  type: string;
-  loadOrder: number;
-  dependencies: string[];
-  source: 'inline' | 'external' | 'extension' | 'unknown';
-  isExtension: boolean;
-  isFirstParty: boolean;
-}
+#### Event Types
+- `blacklisted`: Script from a blacklisted host was blocked
+- `unknown-origin`: Script from a host not in whitelist or blacklist (not blocked, but reported)
+- `dynamic-inline`: Inline script execution (if not allowed)
+- `mutation`: Disallowed DOM mutation
+- `eval`: Use of `eval()` detected
+- `extension`: Script from a browser extension
+
+### Error Handling
+- Invalid or relative script URLs are ignored and do not trigger the callback.
+- Only absolute URLs (with protocol and hostname not matching the current page) are considered for unknown-origin reporting.
+
+## Browser Support
+
+The library is compatible with modern browsers that support:
+- ES2015 (ES6)
+- ES Modules
+- MutationObserver API
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Build the library
+npm run build
+
+# Run tests
+npm test
 ```
-
-#### MutationInfo
-```typescript
-interface MutationInfo {
-  target: Element;
-  type: 'insert' | 'update' | 'remove';
-  timestamp: number;
-  scriptHash: string;
-  context: {
-    parentElement: Element | null;
-    previousSibling: Element | null;
-    nextSibling: Element | null;
-  };
-}
-```
-
-## Security Considerations
-
-- Always enable `strictMode` in production environments
-- Carefully configure `whitelistedHosts` to include only trusted domains
-- Regularly audit the `allowedMutations` configuration
-- Monitor the script registry for unexpected changes
-- Consider implementing additional security measures for critical applications
-- Enable `blockExtensions` to prevent browser extension interference
-- Use `allowDynamicInline` carefully to prevent unauthorized inline script injection
-- Regularly review script sources and execution contexts
-- Use the `onBlocked` callback to monitor and debug security events
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
