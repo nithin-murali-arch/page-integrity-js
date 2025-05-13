@@ -1,50 +1,133 @@
 /**
- * Page Integrity JS - A library to ensure webpage content integrity
- * by verifying that content updates come from first-party JavaScript.
+ * Page Integrity JS
+ * A library for ensuring webpage content integrity by verifying that content updates
+ * come from first-party JavaScript.
+ * 
+ * @packageDocumentation
  */
 
-interface ScriptInfo {
-  hash: string;
-  origin: string;
-  type: string;
-  loadOrder: number;
-  dependencies: string[];
-}
+// Types
+export type MutationType = 'insert' | 'update' | 'remove';
+export type ElementType = 'div' | 'span' | 'p' | 'a' | 'img' | 'button';
+export type ScriptSource = 'inline' | 'external' | 'extension' | 'unknown';
 
-interface MutationInfo {
-  target: Element;
-  type: 'insert' | 'update' | 'remove';
-  timestamp: number;
-  scriptHash: string;
+export interface BlockedEventInfo {
+  /** Type of blocked event */
+  type: 'extension' | 'dynamic-inline' | 'mutation';
+  /** Target element or script that was blocked */
+  target: Element | HTMLScriptElement;
+  /** Stack trace of the blocked event */
+  stackTrace: string;
+  /** Additional context about the blocked event */
   context: {
-    parentElement: Element | null;
-    previousSibling: Element | null;
-    nextSibling: Element | null;
+    /** Source of the script if applicable */
+    source?: ScriptSource;
+    /** Origin of the script if applicable */
+    origin?: string;
+    /** Mutation type if applicable */
+    mutationType?: MutationType;
+    /** Script hash if applicable */
+    scriptHash?: string;
   };
 }
 
-interface PageIntegrityConfig {
-  whitelistedHosts: string[];
+export interface ScriptInfo {
+  /** Unique hash identifier for the script */
+  hash: string;
+  /** Origin of the script */
+  origin: string;
+  /** Script type (e.g., 'text/javascript') */
+  type: string;
+  /** Order in which the script was loaded */
+  loadOrder: number;
+  /** List of script dependencies */
+  dependencies: string[];
+  /** Source of the script execution */
+  source: ScriptSource;
+  /** Whether the script is from a Chrome extension */
+  isExtension: boolean;
+  /** Whether the script is first-party (part of the original HTML) */
+  isFirstParty: boolean;
+}
+
+export interface MutationContext {
+  /** Parent element of the mutated element */
+  parentElement: Element | null;
+  /** Previous sibling element */
+  previousSibling: Element | null;
+  /** Next sibling element */
+  nextSibling: Element | null;
+}
+
+export interface MutationInfo {
+  /** Target element that was mutated */
+  target: Element;
+  /** Type of mutation performed */
+  type: MutationType;
+  /** Timestamp of the mutation */
+  timestamp: number;
+  /** Hash of the script that performed the mutation */
+  scriptHash: string;
+  /** Context information about the mutation */
+  context: MutationContext;
+}
+
+export interface AllowedMutations {
+  /** Allowed HTML element types */
+  elementTypes: ElementType[];
+  /** Allowed HTML attributes */
+  attributes: string[];
+  /** Regex patterns for allowed attributes */
+  patterns: RegExp[];
+}
+
+export interface PageIntegrityConfig {
+  /** Whether to enforce strict validation of all mutations */
   strictMode?: boolean;
-  allowedMutations?: {
-    elementTypes: string[];
-    attributes: string[];
-    patterns: RegExp[];
-  };
+  /** List of trusted hosts allowed to modify content */
+  whitelistedHosts?: string[];
+  /** Configuration for allowed mutations */
+  allowedMutations?: AllowedMutations;
+  /** Whether to block Chrome extensions */
+  blockExtensions?: boolean;
+  /** Whether to allow dynamically added inline scripts */
+  allowDynamicInline?: boolean;
+  /** Callback function for blocked events */
+  onBlocked?: (info: BlockedEventInfo) => void;
 }
 
 class PageIntegrity {
-  private contentUpdates: Map<Element, MutationInfo[]> = new Map();
-  private isMonitoring: boolean = false;
-  private allowedOrigins: Set<string>;
-  private config: PageIntegrityConfig;
-  private scriptRegistry: Map<string, ScriptInfo> = new Map();
-  private mutationWhitelist: Set<string> = new Set();
-  private loadOrder: number = 0;
+  private readonly contentUpdates: Map<Element, MutationInfo[]>;
+  private readonly scriptRegistry: Map<string, ScriptInfo>;
+  private readonly allowedOrigins: Set<string>;
+  private readonly config: Required<PageIntegrityConfig>;
+  private isMonitoring: boolean;
+  private loadOrder: number;
+  private readonly extensionPatterns: RegExp[] = [
+    /^chrome-extension:\/\//,
+    /^moz-extension:\/\//,
+    /^safari-extension:\/\//,
+    /^ms-browser-extension:\/\//,
+    /^chrome:\/\//,
+    /^moz:\/\//,
+    /^safari:\/\//,
+    /^ms-browser:\/\//
+  ];
+  private readonly initialScripts: Set<string>;
 
   constructor(config: PageIntegrityConfig) {
+    this.contentUpdates = new Map();
+    this.scriptRegistry = new Map();
+    this.isMonitoring = false;
+    this.loadOrder = 0;
+    this.initialScripts = new Set();
+
     this.config = {
       strictMode: false,
+      whitelistedHosts: [],
+      blockExtensions: true,
+      allowDynamicInline: false,
+      onBlocked: () => {},
       allowedMutations: {
         elementTypes: ['div', 'span', 'p', 'a', 'img', 'button'],
         attributes: ['class', 'style', 'src', 'href', 'alt'],
@@ -52,11 +135,40 @@ class PageIntegrity {
       },
       ...config
     };
+
     this.allowedOrigins = new Set([
       window.location.origin,
       ...this.config.whitelistedHosts
     ]);
+
+    this.recordInitialScripts();
     this.initializeScriptRegistry();
+  }
+
+  private notifyBlocked(info: BlockedEventInfo): void {
+    this.config.onBlocked(info);
+  }
+
+  private recordInitialScripts(): void {
+    const scripts = document.getElementsByTagName('script');
+    Array.from(scripts).forEach(script => {
+      const hash = this.calculateScriptHash(script);
+      this.initialScripts.add(hash);
+    });
+  }
+
+  private isExtensionScript(url: string): boolean {
+    return this.extensionPatterns.some(pattern => pattern.test(url));
+  }
+
+  private getScriptSource(script: HTMLScriptElement): ScriptSource {
+    if (this.isExtensionScript(script.src)) {
+      return 'extension';
+    }
+    if (!script.src && script.textContent) {
+      return 'inline';
+    }
+    return 'external';
   }
 
   /**
@@ -76,21 +188,65 @@ class PageIntegrity {
    * Register a script in the registry
    */
   private registerScript(script: HTMLScriptElement): void {
-    if (!script.src) return;
+    if (!script.src && !script.textContent) return;
 
     try {
-      const url = new URL(script.src);
+      const url = script.src ? new URL(script.src) : new URL(window.location.href);
       const hash = this.calculateScriptHash(script);
+      const source = this.getScriptSource(script);
+      const isExtension = source === 'extension';
+      const isFirstParty = this.initialScripts.has(hash) || 
+                          this.allowedOrigins.has(url.origin);
+      const stack = new Error().stack || '';
+
+      // Block extension scripts if configured
+      if (isExtension && this.config.blockExtensions) {
+        this.notifyBlocked({
+          type: 'extension',
+          target: script,
+          stackTrace: stack,
+          context: {
+            source,
+            origin: url.origin,
+            scriptHash: hash
+          }
+        });
+
+        if (this.config.strictMode) {
+          return;
+        }
+      }
+
+      // Block dynamic inline scripts if not allowed
+      if (source === 'inline' && !isFirstParty && !this.config.allowDynamicInline) {
+        this.notifyBlocked({
+          type: 'dynamic-inline',
+          target: script,
+          stackTrace: stack,
+          context: {
+            source,
+            origin: url.origin,
+            scriptHash: hash
+          }
+        });
+
+        if (this.config.strictMode) {
+          return;
+        }
+      }
       
       this.scriptRegistry.set(hash, {
         hash,
         origin: url.origin,
         type: script.type || 'text/javascript',
         loadOrder: this.loadOrder++,
-        dependencies: this.extractDependencies(script)
+        dependencies: this.extractDependencies(script),
+        source,
+        isExtension,
+        isFirstParty
       });
     } catch (e) {
-      console.warn(`Failed to register script: ${script.src}`);
+      console.warn(`Failed to register script: ${script.src || 'inline'}`);
     }
   }
 
@@ -98,9 +254,7 @@ class PageIntegrity {
    * Calculate a hash for the script content
    */
   private calculateScriptHash(script: HTMLScriptElement): string {
-    // In a real implementation, this would use a proper hashing algorithm
-    // For now, we'll use a simple string-based hash
-    const content = script.src + script.type + script.textContent;
+    const content = `${script.src}${script.type}${script.textContent}`;
     return btoa(content).slice(0, 32);
   }
 
@@ -111,19 +265,18 @@ class PageIntegrity {
     const dependencies: string[] = [];
     const content = script.textContent || '';
 
-    // Look for common dependency patterns
     const patterns = [
       /import\s+.*\s+from\s+['"]([^'"]+)['"]/g,
       /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
       /define\s*\(\s*['"]([^'"]+)['"]/g
     ];
 
-    patterns.forEach(pattern => {
+    for (const pattern of patterns) {
       let match;
       while ((match = pattern.exec(content)) !== null) {
         dependencies.push(match[1]);
       }
-    });
+    }
 
     return dependencies;
   }
@@ -176,39 +329,52 @@ class PageIntegrity {
   private handleMutation(mutation: MutationRecord): void {
     const scriptHash = this.getExecutingScriptHash();
     const isAllowed = this.isAllowedMutation(mutation, scriptHash);
+    const stack = new Error().stack || '';
 
     if (!isAllowed) {
-      console.warn('Content update detected from unauthorized source:', {
-        target: mutation.target,
-        type: mutation.type,
-        scriptHash
+      this.notifyBlocked({
+        type: 'mutation',
+        target: mutation.target as Element,
+        stackTrace: stack,
+        context: {
+          mutationType: this.getMutationType(mutation),
+          scriptHash
+        }
       });
     }
 
-    // Handle childList mutations
-    if (mutation.type === 'childList') {
-      mutation.addedNodes.forEach(node => {
-        if (node instanceof Element) {
-          this.recordUpdate(node, 'insert', scriptHash);
+    switch (mutation.type) {
+      case 'childList':
+        this.handleChildListMutation(mutation, scriptHash);
+        break;
+      case 'attributes':
+        if (mutation.target instanceof Element) {
+          this.recordUpdate(mutation.target, 'update', scriptHash);
         }
-      });
-      mutation.removedNodes.forEach(node => {
-        if (node instanceof Element) {
-          this.recordUpdate(node, 'remove', scriptHash);
+        break;
+      case 'characterData':
+        if (mutation.target.parentElement) {
+          this.recordUpdate(mutation.target.parentElement, 'update', scriptHash);
         }
-      });
-      // Also record update for the parent element
-      if (mutation.target instanceof Element) {
-        this.recordUpdate(mutation.target, 'update', scriptHash);
+        break;
+    }
+  }
+
+  private handleChildListMutation(mutation: MutationRecord, scriptHash: string): void {
+    mutation.addedNodes.forEach(node => {
+      if (node instanceof Element) {
+        this.recordUpdate(node, 'insert', scriptHash);
       }
-    }
-    // Handle attribute mutations
-    else if (mutation.type === 'attributes' && mutation.target instanceof Element) {
+    });
+
+    mutation.removedNodes.forEach(node => {
+      if (node instanceof Element) {
+        this.recordUpdate(node, 'remove', scriptHash);
+      }
+    });
+
+    if (mutation.target instanceof Element) {
       this.recordUpdate(mutation.target, 'update', scriptHash);
-    }
-    // Handle characterData mutations
-    else if (mutation.type === 'characterData' && mutation.target.parentElement) {
-      this.recordUpdate(mutation.target.parentElement, 'update', scriptHash);
     }
   }
 
@@ -235,8 +401,14 @@ class PageIntegrity {
    */
   private getExecutingScriptHash(): string {
     const stack = new Error().stack || '';
-    const lines = stack.split('\n');
     
+    // Check for extension execution
+    const extensionMatch = stack.match(/chrome-extension:\/\/[^/]+/);
+    if (extensionMatch && this.config.blockExtensions && this.config.strictMode) {
+      return '';
+    }
+
+    const lines = stack.split('\n');
     for (const line of lines) {
       for (const [hash, info] of this.scriptRegistry) {
         if (line.includes(info.origin)) {
@@ -272,7 +444,7 @@ class PageIntegrity {
     const target = mutation.target as Element;
 
     // Check element type
-    if (!this.config.allowedMutations?.elementTypes.includes(target.tagName.toLowerCase())) {
+    if (!this.config.allowedMutations?.elementTypes.includes(target.tagName.toLowerCase() as ElementType)) {
       return false;
     }
 

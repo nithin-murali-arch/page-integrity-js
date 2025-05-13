@@ -1,6 +1,6 @@
 # Page Integrity JS
 
-A robust JavaScript library that ensures webpage content integrity by verifying that DOM mutations come from trusted sources. Inspired by Akamai's Page Integrity Manager, this library provides a comprehensive solution for protecting your web application from unauthorized content modifications.
+A robust JavaScript library that ensures webpage content integrity by verifying that DOM mutations come from trusted sources. This library provides a comprehensive solution for protecting your web application from unauthorized content modifications.
 
 ## Features
 
@@ -10,6 +10,9 @@ A robust JavaScript library that ensures webpage content integrity by verifying 
 - **Dynamic Script Monitoring**: Tracks dynamically added scripts and their mutations
 - **Configurable Security**: Flexible configuration for different security requirements
 - **Detailed Reporting**: Comprehensive information about content modifications
+- **Extension Detection**: Identifies and blocks browser extension scripts
+- **First-Party Script Protection**: Allows legitimate first-party scripts while blocking unauthorized ones
+- **Debug Callbacks**: Detailed information about blocked events with stack traces
 
 ## Installation
 
@@ -19,13 +22,22 @@ npm install page-integrity-js
 
 ## Quick Start
 
-```javascript
+```typescript
 import PageIntegrity from 'page-integrity-js';
 
 // Initialize with configuration
 const pageIntegrity = new PageIntegrity({
   whitelistedHosts: ['https://trusted-cdn.com'],
   strictMode: true,
+  blockExtensions: true,
+  allowDynamicInline: false,
+  onBlocked: (info) => {
+    console.log('Blocked event:', {
+      type: info.type,
+      stackTrace: info.stackTrace,
+      context: info.context
+    });
+  },
   allowedMutations: {
     elementTypes: ['div', 'span', 'p', 'a', 'img', 'button'],
     attributes: ['class', 'style', 'src', 'href', 'alt'],
@@ -47,129 +59,170 @@ const scriptRegistry = pageIntegrity.getScriptRegistry();
 
 ### whitelistedHosts
 Array of trusted hosts that are allowed to modify content. Must be valid HTTP/HTTPS URLs:
-```javascript
+```typescript
 whitelistedHosts: ['https://trusted-cdn.com', 'https://api.example.com']
 ```
 
 ### strictMode
 When enabled, enforces strict validation of all mutations:
-```javascript
+```typescript
 strictMode: true // Default: false
 ```
 
-### allowedMutations
-Configuration for allowed mutation types and patterns:
+### blockExtensions
+When enabled, blocks scripts from browser extensions:
+```typescript
+blockExtensions: true // Default: true
+```
 
-```javascript
+### allowDynamicInline
+When enabled, allows dynamically added inline scripts:
+```typescript
+allowDynamicInline: false // Default: false
+```
+
+### onBlocked
+Callback function that receives information about blocked events:
+```typescript
+onBlocked: (info: BlockedEventInfo) => void
+```
+
+The callback receives an object with the following structure:
+```typescript
+interface BlockedEventInfo {
+  /** Type of blocked event */
+  type: 'extension' | 'dynamic-inline' | 'mutation';
+  /** Target element or script that was blocked */
+  target: Element | HTMLScriptElement;
+  /** Stack trace of the blocked event */
+  stackTrace: string;
+  /** Additional context about the blocked event */
+  context: {
+    /** Source of the script if applicable */
+    source?: ScriptSource;
+    /** Origin of the script if applicable */
+    origin?: string;
+    /** Mutation type if applicable */
+    mutationType?: MutationType;
+    /** Script hash if applicable */
+    scriptHash?: string;
+  };
+}
+```
+
+### allowedMutations
+Configuration for allowed mutation types and attributes:
+```typescript
 allowedMutations: {
   // Allowed HTML element types
   elementTypes: ['div', 'span', 'p', 'a', 'img', 'button'],
-  
-  // Allowed attributes
+  // Allowed HTML attributes
   attributes: ['class', 'style', 'src', 'href', 'alt'],
-  
-  // Regex patterns for allowed attributes (e.g., data-* attributes)
+  // Regex patterns for allowed attributes
   patterns: [/^data-[a-z-]+$/]
 }
 ```
 
-## How It Works
+## API Reference
 
-### 1. Script Registry
-The library maintains a registry of all scripts in your application:
-- Tracks script origins and hashes
-- Monitors script load order
-- Records script dependencies
-- Detects dynamically added scripts
+### PageIntegrity
 
-### 2. Mutation Analysis
-When a DOM mutation occurs, the library:
-- Identifies the executing script
-- Validates the mutation against allowed patterns
-- Checks the mutation context
-- Records detailed information about the change
+#### constructor(config: PageIntegrityConfig)
+Creates a new PageIntegrity instance with the specified configuration.
 
-### 3. Trust Chain
-The library builds a trust chain by:
-- Registering scripts at load time
-- Tracking script dependencies
-- Validating mutation sources
-- Maintaining a whitelist of trusted origins
+#### startMonitoring(): void
+Starts monitoring DOM changes for content integrity.
 
-## Security Features
+#### getContentUpdates(element: Element): MutationInfo[]
+Returns an array of mutation information for the specified element.
 
-### Script Integrity
-- Script hashing for content verification
-- Origin validation
-- Dependency tracking
-- Load order monitoring
+#### clearContentUpdates(): void
+Clears all recorded content updates.
 
-### Mutation Validation
-- Element type validation
-- Attribute whitelisting
-- Pattern-based validation
-- Context verification
+#### getConfig(): PageIntegrityConfig
+Returns the current configuration.
 
-### Trust Management
-- First-party script verification
-- Whitelisted host support
-- Dynamic script monitoring
-- Trust chain validation
+#### getScriptRegistry(): Map<string, ScriptInfo>
+Returns the script registry containing information about all registered scripts.
 
-## Best Practices
+### Types
 
-1. **Enable Strict Mode in Production**
-   ```javascript
-   const pageIntegrity = new PageIntegrity({
-     strictMode: true,
-     // ... other config
-   });
-   ```
+#### PageIntegrityConfig
+```typescript
+interface PageIntegrityConfig {
+  strictMode?: boolean;
+  whitelistedHosts?: string[];
+  blockExtensions?: boolean;
+  allowDynamicInline?: boolean;
+  onBlocked?: (info: BlockedEventInfo) => void;
+  allowedMutations?: {
+    elementTypes: string[];
+    attributes: string[];
+    patterns: RegExp[];
+  };
+}
+```
 
-2. **Whitelist Only Trusted Hosts**
-   ```javascript
-   whitelistedHosts: [
-     'https://your-cdn.com',
-     'https://trusted-api.com'
-   ]
-   ```
+#### BlockedEventInfo
+```typescript
+interface BlockedEventInfo {
+  type: 'extension' | 'dynamic-inline' | 'mutation';
+  target: Element | HTMLScriptElement;
+  stackTrace: string;
+  context: {
+    source?: ScriptSource;
+    origin?: string;
+    mutationType?: MutationType;
+    scriptHash?: string;
+  };
+}
+```
 
-3. **Define Clear Mutation Rules**
-   ```javascript
-   allowedMutations: {
-     elementTypes: ['div', 'span', 'p'],
-     attributes: ['class', 'data-*'],
-     patterns: [/^data-[a-z-]+$/]
-   }
-   ```
+#### ScriptInfo
+```typescript
+interface ScriptInfo {
+  hash: string;
+  origin: string;
+  type: string;
+  loadOrder: number;
+  dependencies: string[];
+  source: 'inline' | 'external' | 'extension' | 'unknown';
+  isExtension: boolean;
+  isFirstParty: boolean;
+}
+```
 
-4. **Monitor Content Updates**
-   ```javascript
-   const updates = pageIntegrity.getContentUpdates(element);
-   updates.forEach(update => {
-     console.log(`Mutation from ${update.scriptHash}`);
-   });
-   ```
+#### MutationInfo
+```typescript
+interface MutationInfo {
+  target: Element;
+  type: 'insert' | 'update' | 'remove';
+  timestamp: number;
+  scriptHash: string;
+  context: {
+    parentElement: Element | null;
+    previousSibling: Element | null;
+    nextSibling: Element | null;
+  };
+}
+```
 
 ## Security Considerations
 
-- The library helps prevent unauthorized content modifications
-- It can detect and block malicious script injections
-- Provides visibility into the source of DOM changes
-- Helps maintain content integrity in production
-- Supports compliance with security requirements
-
-## Browser Support
-
-- Chrome 60+
-- Firefox 55+
-- Safari 11+
-- Edge 79+
+- Always enable `strictMode` in production environments
+- Carefully configure `whitelistedHosts` to include only trusted domains
+- Regularly audit the `allowedMutations` configuration
+- Monitor the script registry for unexpected changes
+- Consider implementing additional security measures for critical applications
+- Enable `blockExtensions` to prevent browser extension interference
+- Use `allowDynamicInline` carefully to prevent unauthorized inline script injection
+- Regularly review script sources and execution contexts
+- Use the `onBlocked` callback to monitor and debug security events
 
 ## Contributing
 
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-MIT License - see the [LICENSE](LICENSE) file for details
+MIT

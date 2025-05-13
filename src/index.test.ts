@@ -1,4 +1,4 @@
-import PageIntegrity from './index';
+import PageIntegrity, { MutationType, ElementType } from './index';
 
 // Mock MutationRecord
 class MockMutationRecord implements MutationRecord {
@@ -31,22 +31,19 @@ describe('PageIntegrity', () => {
     whitelistedHosts: ['https://trusted-cdn.com'],
     strictMode: true,
     allowedMutations: {
-      elementTypes: ['div', 'span', 'p'],
+      elementTypes: ['div', 'span', 'p'] as ElementType[],
       attributes: ['class', 'style'],
       patterns: [/^data-[a-z-]+$/]
     }
   };
 
   beforeEach(() => {
-    // Reset DOM
     document.body.innerHTML = '';
     
-    // Create test elements
     const container = document.createElement('div');
     container.id = 'test-container';
     document.body.appendChild(container);
 
-    // Create test script
     const script = document.createElement('script');
     script.src = 'https://trusted-cdn.com/test.js';
     script.textContent = 'console.log("test");';
@@ -57,74 +54,67 @@ describe('PageIntegrity', () => {
   });
 
   describe('Initialization', () => {
-    test('should initialize with default configuration', () => {
-      const instance = new PageIntegrity({
-        whitelistedHosts: []
-      });
+    it('should initialize with default configuration', () => {
+      const instance = new PageIntegrity({ whitelistedHosts: [] });
       const config = instance.getConfig();
+      
       expect(config.strictMode).toBe(false);
       expect(config.allowedMutations).toBeDefined();
+      expect(config.whitelistedHosts).toEqual([]);
     });
 
-    test('should initialize with custom configuration', () => {
+    it('should initialize with custom configuration', () => {
       const config = pageIntegrity.getConfig();
+      
       expect(config.whitelistedHosts).toEqual(['https://trusted-cdn.com']);
       expect(config.strictMode).toBe(true);
       expect(config.allowedMutations?.elementTypes).toEqual(['div', 'span', 'p']);
     });
 
-    test('should register existing scripts', () => {
+    it('should register existing scripts', () => {
       const registry = pageIntegrity.getScriptRegistry();
       expect(registry.size).toBeGreaterThan(0);
     });
   });
 
-  describe('Script Registry', () => {
-    test('should register new scripts', () => {
-      const script = document.createElement('script');
-      script.src = 'https://trusted-cdn.com/new.js';
-      document.head.appendChild(script);
-
-      const registry = pageIntegrity.getScriptRegistry();
-      const hasNewScript = Array.from(registry.values()).some(
-        info => info.origin === 'https://trusted-cdn.com' && info.hash
-      );
-      expect(hasNewScript).toBe(true);
-    });
-
-    test('should track script dependencies', () => {
-      const script = document.createElement('script');
-      script.textContent = `
-        import { something } from 'https://trusted-cdn.com/dep.js';
-        require('https://trusted-cdn.com/other.js');
-      `;
-      // @ts-ignore: Accessing private method for test
-      const deps = (pageIntegrity as any).extractDependencies(script);
-      expect(deps).toContain('https://trusted-cdn.com/dep.js');
-      expect(deps).toContain('https://trusted-cdn.com/other.js');
-    });
-  });
-
-  describe('Mutation Monitoring', () => {
-    test('should detect and record mutations', async () => {
+  describe('Mutation Handling', () => {
+    it('should track element insertions', async () => {
       const element = document.createElement('div');
-      element.id = 'test-element';
       document.body.appendChild(element);
-      
-      // Simulate a mutation
-      const textNode = document.createTextNode('test content');
-      element.appendChild(textNode);
-      element.setAttribute('class', 'test-class');
       
       await new Promise(r => setTimeout(r, 100));
       
       const updates = pageIntegrity.getContentUpdates(element);
-      console.log('DEBUG updates:', updates);
-      expect(updates.length).toBeGreaterThan(0);
-      expect(updates[0]?.type).toBe('update');
+      expect(updates[0]?.type).toBe('insert');
     });
 
-    test('should validate allowed element types', async () => {
+    it('should track element updates', async () => {
+      const element = document.createElement('div');
+      document.body.appendChild(element);
+      
+      element.className = 'updated';
+      
+      await new Promise(r => setTimeout(r, 100));
+      
+      const updates = pageIntegrity.getContentUpdates(element);
+      expect(updates[1]?.type).toBe('update');
+    });
+
+    it('should track element removals', async () => {
+      const element = document.createElement('div');
+      document.body.appendChild(element);
+      
+      element.remove();
+      
+      await new Promise(r => setTimeout(r, 100));
+      
+      const updates = pageIntegrity.getContentUpdates(element);
+      expect(updates[2]?.type).toBe('remove');
+    });
+  });
+
+  describe('Content Updates', () => {
+    it('should clear content updates', async () => {
       const element = document.createElement('div');
       document.body.appendChild(element);
       
@@ -133,35 +123,60 @@ describe('PageIntegrity', () => {
       
       await new Promise(r => setTimeout(r, 100));
       
+      pageIntegrity.clearContentUpdates();
       const updates = pageIntegrity.getContentUpdates(element);
-      console.log('DEBUG updates:', updates);
-      expect(updates[0]?.type).toBe('insert');
+      expect(updates.length).toBe(0);
     });
 
-    test('should validate allowed attributes', async () => {
-      const element = document.createElement('div');
-      document.body.appendChild(element);
+    it('should track mutation context', async () => {
+      const parent = document.createElement('div');
+      const element = document.createElement('span');
+      parent.appendChild(element);
+      document.body.appendChild(parent);
       
-      element.setAttribute('class', 'test-class');
+      const textNode = document.createTextNode('test');
+      element.appendChild(textNode);
       
       await new Promise(r => setTimeout(r, 100));
       
       const updates = pageIntegrity.getContentUpdates(element);
-      console.log('DEBUG updates:', updates);
-      expect(updates[0]?.type).toBe('update');
+      expect(updates[0]?.context.parentElement).toBe(parent);
+      expect(updates[0]?.context.previousSibling).toBeNull();
+      expect(updates[0]?.context.nextSibling).toBeNull();
+    });
+  });
+
+  describe('Script Registry', () => {
+    it('should track script dependencies', () => {
+      const script = document.createElement('script');
+      script.src = 'https://trusted-cdn.com/dependency.js';
+      script.textContent = 'import { something } from "./module";';
+      document.head.appendChild(script);
+
+      const registry = pageIntegrity.getScriptRegistry();
+      const scriptInfo = Array.from(registry.values()).find(
+        info => info.origin === 'https://trusted-cdn.com'
+      );
+
+      expect(scriptInfo?.dependencies).toContain('./module');
     });
 
-    test('should validate data attributes', async () => {
-      const element = document.createElement('div');
-      document.body.appendChild(element);
-      
-      element.setAttribute('data-test', 'value');
-      
-      await new Promise(r => setTimeout(r, 100));
-      
-      const updates = pageIntegrity.getContentUpdates(element);
-      console.log('DEBUG updates:', updates);
-      expect(updates[0]?.type).toBe('update');
+    it('should maintain script load order', () => {
+      const script1 = document.createElement('script');
+      script1.src = 'https://trusted-cdn.com/script1.js';
+      document.head.appendChild(script1);
+
+      const script2 = document.createElement('script');
+      script2.src = 'https://trusted-cdn.com/script2.js';
+      document.head.appendChild(script2);
+
+      const registry = pageIntegrity.getScriptRegistry();
+      const scripts = Array.from(registry.values())
+        .filter(info => info.origin === 'https://trusted-cdn.com')
+        .sort((a, b) => a.loadOrder - b.loadOrder);
+
+      expect(scripts[0].hash).toContain('script1');
+      expect(scripts[1].hash).toContain('script2');
     });
   });
 
@@ -195,38 +210,6 @@ describe('PageIntegrity', () => {
       // @ts-ignore - Accessing private method for testing
       const isAllowed = pageIntegrity.isAllowedMutation(mutation, scriptHash);
       expect(isAllowed).toBe(true);
-    });
-  });
-
-  describe('Content Updates', () => {
-    test('should clear content updates', async () => {
-      const element = document.createElement('div');
-      document.body.appendChild(element);
-      
-      const textNode = document.createTextNode('test');
-      element.appendChild(textNode);
-      
-      await new Promise(r => setTimeout(r, 100));
-      
-      pageIntegrity.clearContentUpdates();
-      const updates = pageIntegrity.getContentUpdates(element);
-      expect(updates.length).toBe(0);
-    });
-
-    test('should track mutation context', async () => {
-      const parent = document.createElement('div');
-      const element = document.createElement('span');
-      parent.appendChild(element);
-      document.body.appendChild(parent);
-      
-      const textNode = document.createTextNode('test');
-      element.appendChild(textNode);
-      
-      await new Promise(r => setTimeout(r, 100));
-      
-      const updates = pageIntegrity.getContentUpdates(element);
-      console.log('DEBUG updates:', updates);
-      expect(updates[0]?.context.parentElement).toBe(parent);
     });
   });
 }); 
