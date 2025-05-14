@@ -11,10 +11,19 @@ export type ElementType = 'div' | 'span' | 'p' | 'a' | 'img' | 'button';
 /** Source of a script */
 export type ScriptSource = 'inline' | 'external' | 'extension' | 'unknown';
 
+/** Type of blocked event */
+export type BlockedEventType = 
+  | 'extension'
+  | 'pattern-match'
+  | 'blocked'
+  | 'unknown-origin'
+  | 'dynamic-inline'
+  | 'eval';
+
 /** Information about a blocked event */
 export interface BlockedEventInfo {
   /** Type of blocked event */
-  type: 'extension' | 'dynamic-inline' | 'mutation' | 'blacklisted';
+  type: BlockedEventType;
   /** Target element or script that was blocked */
   target: Element | HTMLScriptElement;
   /** Stack trace of the blocked event */
@@ -22,13 +31,9 @@ export interface BlockedEventInfo {
   /** Additional context about the blocked event */
   context: {
     /** Source of the script if applicable */
-    source?: ScriptSource;
+    source: ScriptSource;
     /** Origin of the script if applicable */
-    origin?: string;
-    /** Mutation type if applicable */
-    mutationType?: MutationType;
-    /** Script hash if applicable */
-    scriptHash?: string;
+    origin: string;
   };
 }
 
@@ -90,17 +95,18 @@ export interface AllowedMutations {
 export interface PageIntegrityConfig {
   /** Whether to enforce strict validation of all mutations */
   strictMode?: boolean;
-  /** List of trusted hosts allowed to modify content */
-  whitelistedHosts?: string[];
-  /** List of blocked hosts that are not allowed to execute */
-  blacklistedHosts?: string[];
-  /** Configuration for allowed mutations */
-  allowedMutations?: AllowedMutations;
+  /** List of trusted hosts and patterns allowed to modify content */
+  allowedHosts?: string[];
+  /** List of blocked hosts and patterns that are not allowed to execute */
+  blockedHosts?: string[];
   /** Whether to block Chrome extensions */
   blockExtensions?: boolean;
   /** Whether to allow dynamically added inline scripts */
   allowDynamicInline?: boolean;
   /** Callback function for blocked events */
   onBlocked?: (info: BlockedEventInfo) => void;
+  /** Skip createElement override */
   skipCreateElementOverride?: boolean;
+  /** Whether to report scripts not in either allowlist or blocklist */
+  reportUnknownScripts?: boolean;
 } 

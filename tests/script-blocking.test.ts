@@ -62,7 +62,8 @@ describe('ScriptBlocker', () => {
       }));
     });
 
-    it('should notify about unknown origins', () => {
+    it('should notify about unknown origins when reportUnknownScripts is true', () => {
+      pageIntegrity.updateConfig({ reportUnknownScripts: true });
       const script = document.createElement('script');
       script.src = 'https://unknown.com/script.js';
       
@@ -76,6 +77,73 @@ describe('ScriptBlocker', () => {
           origin: 'https://unknown.com'
         }
       }));
+    });
+
+    it('should not notify about unknown origins when reportUnknownScripts is false', () => {
+      pageIntegrity.updateConfig({ reportUnknownScripts: false });
+      const script = document.createElement('script');
+      script.src = 'https://unknown.com/script.js';
+      
+      const result = pageIntegrity['scriptBlocker'].checkAndBlockScript(script);
+      
+      expect(result).toBe(false);
+      expect(mockOnBlocked).not.toHaveBeenCalled();
+    });
+
+    it('should block scripts matching URL patterns', () => {
+      pageIntegrity.updateConfig({
+        blacklistedUrlPatterns: ['https://*.malicious.com/*', 'http://dangerous.net/*']
+      });
+
+      const script1 = document.createElement('script');
+      script1.src = 'https://sub.malicious.com/script.js';
+      expect(pageIntegrity['scriptBlocker'].checkAndBlockScript(script1)).toBe(true);
+      expect(mockOnBlocked).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'pattern-match',
+        context: {
+          source: 'external',
+          origin: 'https://sub.malicious.com'
+        }
+      }));
+
+      const script2 = document.createElement('script');
+      script2.src = 'http://dangerous.net/script.js';
+      expect(pageIntegrity['scriptBlocker'].checkAndBlockScript(script2)).toBe(true);
+      expect(mockOnBlocked).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'pattern-match',
+        context: {
+          source: 'external',
+          origin: 'http://dangerous.net'
+        }
+      }));
+    });
+
+    it('should block Chrome extensions when blockExtensions is true', () => {
+      pageIntegrity.updateConfig({ blockExtensions: true });
+      const script = document.createElement('script');
+      script.src = 'chrome-extension://abcdefghijklmnopqrstuvwxyz/script.js';
+      
+      const result = pageIntegrity['scriptBlocker'].checkAndBlockScript(script);
+      
+      expect(result).toBe(true);
+      expect(mockOnBlocked).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'extension',
+        context: {
+          source: 'external',
+          origin: 'chrome-extension://abcdefghijklmnopqrstuvwxyz'
+        }
+      }));
+    });
+
+    it('should allow Chrome extensions when blockExtensions is false', () => {
+      pageIntegrity.updateConfig({ blockExtensions: false });
+      const script = document.createElement('script');
+      script.src = 'chrome-extension://abcdefghijklmnopqrstuvwxyz/script.js';
+      
+      const result = pageIntegrity['scriptBlocker'].checkAndBlockScript(script);
+      
+      expect(result).toBe(false);
+      expect(mockOnBlocked).not.toHaveBeenCalled();
     });
   });
 }); 

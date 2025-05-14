@@ -40,8 +40,20 @@ import { PageIntegrity } from 'page-integrity-js';
 
 // Initialize with configuration
 const integrity = new PageIntegrity({
-  whitelistedHosts: ['trusted-domain.com'],
-  blacklistedHosts: ['malicious-domain.com'],
+  // Allow specific trusted scripts
+  allowedHosts: [
+    'https://cdn.trusted.com/scripts/main.js',  // Absolute URL
+    'https://api.trusted.com/*',                // Pattern for all API scripts
+    '*.trusted-domain.com'                      // Pattern for all subdomains
+  ],
+  // Block specific malicious scripts
+  blockedHosts: [
+    'https://malicious.com/evil.js',            // Absolute URL
+    'https://*.malicious.com/*',                // Pattern for all malicious scripts
+    'http://dangerous.net/*'                    // Pattern for all HTTP scripts
+  ],
+  blockExtensions: true,
+  reportUnknownScripts: true,
   onBlocked: (info) => {
     console.warn('Blocked script execution:', info);
   }
@@ -57,8 +69,10 @@ integrity.setupBlocking();
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `whitelistedHosts` | `string[]` | `[]` | List of trusted hostnames |
-| `blacklistedHosts` | `string[]` | `[]` | List of blocked hostnames |
+| `allowedHosts` | `string[]` | `[]` | List of trusted hosts and patterns (supports wildcards and absolute URLs) |
+| `blockedHosts` | `string[]` | `[]` | List of blocked hosts and patterns (supports wildcards and absolute URLs) |
+| `blockExtensions` | `boolean` | `false` | Whether to block Chrome extensions |
+| `reportUnknownScripts` | `boolean` | `false` | Whether to report scripts not in allowlist/blocklist |
 | `onBlocked` | `(info: BlockInfo) => void` | - | Callback for blocked scripts |
 | `skipCreateElementOverride` | `boolean` | `false` | Skip createElement override |
 
@@ -66,14 +80,24 @@ integrity.setupBlocking();
 
 ```typescript
 const config = {
-  whitelistedHosts: [
-    'cdn.trusted.com',
-    'api.secure.com'
+  allowedHosts: [
+    // Absolute URLs
+    'https://cdn.trusted.com/scripts/main.js',
+    'https://api.trusted.com/auth.js',
+    // Patterns
+    'https://*.trusted.com/*',
+    'https://trusted.com/api/*'
   ],
-  blacklistedHosts: [
-    'malicious.com',
-    'suspicious.net'
+  blockedHosts: [
+    // Absolute URLs
+    'https://malicious.com/evil.js',
+    'http://dangerous.net/script.js',
+    // Patterns
+    'https://*.malicious.com/*',
+    'http://dangerous.net/*'
   ],
+  blockExtensions: true,
+  reportUnknownScripts: true,
   onBlocked: (info) => {
     // Log blocked scripts
     console.warn('Blocked:', info);
@@ -135,7 +159,6 @@ The main class for controlling page integrity.
 #### Events
 
 - `onBlocked`: Triggered when a script is blocked
-- `onMutation`: Triggered when DOM mutations occur
 
 ## 🤝 Contributing
 

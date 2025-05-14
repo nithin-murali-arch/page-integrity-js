@@ -1,11 +1,11 @@
-import { BlockedEventInfo, PageIntegrityConfig, ScriptSource } from './types';
+import { BlockedEventInfo, BlockedEventType, PageIntegrityConfig, ScriptSource } from './types';
 import { createHash } from './utils/hash';
 import { sendMessage } from './utils/message';
 
 export class ScriptBlocker {
   private config: PageIntegrityConfig;
-  private blockedOrigins!: Set<string> | null;
-  private whitelistedOrigins!: Set<string> | null;
+  private blockedPatterns!: RegExp[] | null;
+  private allowedPatterns!: RegExp[] | null;
   private readonly originalCreateElement: typeof document.createElement;
   private readonly originalAppendChild: typeof Node.prototype.appendChild;
   private readonly originalInnerHTML: PropertyDescriptor;
@@ -13,29 +13,39 @@ export class ScriptBlocker {
 
   constructor(config: PageIntegrityConfig) {
     this.config = config;
-    this.setOriginsFromConfig(config);
+    this.setPatternsFromConfig(config);
     this.originalCreateElement = document.createElement;
     this.originalAppendChild = Node.prototype.appendChild;
     this.originalInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML')!;
     this.monitorEval();
   }
 
-  private setOriginsFromConfig(config: PageIntegrityConfig) {
-    this.blockedOrigins = (config.blacklistedHosts && config.blacklistedHosts.length > 0)
-      ? new Set(config.blacklistedHosts)
+  private setPatternsFromConfig(config: PageIntegrityConfig) {
+    // Convert allowed hosts/patterns to RegExp
+    this.allowedPatterns = (config.allowedHosts && config.allowedHosts.length > 0)
+      ? config.allowedHosts.map(pattern => 
+          new RegExp('^' + pattern.replace(/\*/g, '.*') + '$'))
       : null;
-    this.whitelistedOrigins = (config.whitelistedHosts && config.whitelistedHosts.length > 0)
-      ? new Set(config.whitelistedHosts)
+    
+    // Convert blocked hosts/patterns to RegExp
+    this.blockedPatterns = (config.blockedHosts && config.blockedHosts.length > 0)
+      ? config.blockedHosts.map(pattern => 
+          new RegExp('^' + pattern.replace(/\*/g, '.*') + '$'))
       : null;
+  }
+
+  private isChromeExtension(url: string): boolean {
+    return url.startsWith('chrome-extension://');
+  }
+
+  private matchesPattern(url: string, patterns: RegExp[] | null): boolean {
+    if (!patterns) return false;
+    return patterns.some(pattern => pattern.test(url));
   }
 
   public updateConfig(newConfig: PageIntegrityConfig): void {
     Object.assign(this.config, newConfig);
-    this.setOriginsFromConfig(this.config);
-  }
-
-  private getConfig() {
-    return this.config;
+    this.setPatternsFromConfig(this.config);
   }
 
   private monitorEval(): void {
@@ -48,13 +58,12 @@ export class ScriptBlocker {
         .then(response => {
           const url = response.url;
           if (url) {
-            const hostname = new URL(url).hostname;
-            if (self.whitelistedOrigins && self.whitelistedOrigins.has(hostname)) {
+            if (self.matchesPattern(url, self.allowedPatterns)) {
               originalEval(evalContent);
-            } else if (self.blockedOrigins && self.blockedOrigins.has(hostname)) {
+            } else if (self.matchesPattern(url, self.blockedPatterns)) {
               const stack = new Error().stack || '';
               self.config.onBlocked?.({
-                type: 'blacklisted',
+                type: 'blocked',
                 target: document.documentElement,
                 stackTrace: stack,
                 context: { source: 'eval', origin: url }
@@ -80,11 +89,6 @@ export class ScriptBlocker {
     };
   }
 
-  private extractScriptUrl(content: string): string | null {
-    const urlMatch = content.match(/https?:\/\/[^\s'"]+/);
-    return urlMatch ? urlMatch[0] : null;
-  }
-
   public checkAndBlockScript(script: HTMLScriptElement): boolean {
     // Inline scripts are always allowed
     if (!script.src && script.textContent) {
@@ -94,22 +98,37 @@ export class ScriptBlocker {
     if (script.src) {
       try {
         const scriptUrl = new URL(script.src, window.location.origin);
-        const hostname = scriptUrl.hostname;
-        // 1. Ignore whitelisted
-        if (this.whitelistedOrigins && this.whitelistedOrigins.has(hostname)) {
-          return false; // Do nothing, not even callback
-        }
-        // 2. Block blacklisted
-        if (this.blockedOrigins && this.blockedOrigins.has(hostname)) {
-          this.handleUnauthorizedExecution('blacklisted', script, {
+        const fullUrl = scriptUrl.href;
+
+        // Check for Chrome extensions
+        if (this.config.blockExtensions && this.isChromeExtension(fullUrl)) {
+          this.handleUnauthorizedExecution('extension', script, {
             source: 'external',
             origin: scriptUrl.origin
           });
           script.remove();
           return true;
         }
-        // 3. Call callback for unknown (not whitelisted, not blacklisted), only for absolute URLs and not localhost
-        if ((scriptUrl.protocol === 'http:' || scriptUrl.protocol === 'https:') && scriptUrl.hostname !== window.location.hostname) {
+
+        // 1. Check if allowed
+        if (this.matchesPattern(fullUrl, this.allowedPatterns)) {
+          return false; // Do nothing, not even callback
+        }
+
+        // 2. Check if blocked
+        if (this.matchesPattern(fullUrl, this.blockedPatterns)) {
+          this.handleUnauthorizedExecution('blocked', script, {
+            source: 'external',
+            origin: scriptUrl.origin
+          });
+          script.remove();
+          return true;
+        }
+
+        // 3. Report unknown scripts if configured
+        if (this.config.reportUnknownScripts && 
+            (scriptUrl.protocol === 'http:' || scriptUrl.protocol === 'https:') && 
+            scriptUrl.hostname !== window.location.hostname) {
           if (!script.hasAttribute('data-pi-checked')) {
             script.setAttribute('data-pi-checked', '1');
             if (this.config.onBlocked) {
@@ -135,10 +154,86 @@ export class ScriptBlocker {
   }
 
   private setupCreateElementBlocking(): void {
-    // No blocking here, just return the element
     const self = this;
     document.createElement = function(tagName: string, options?: ElementCreationOptions): HTMLElement {
-      return self.originalCreateElement.call(document, tagName, options);
+      const element = self.originalCreateElement.call(document, tagName, options);
+      
+      if (tagName.toLowerCase() === 'script') {
+        const script = element as HTMLScriptElement;
+        
+        // Handle inline scripts
+        if (!script.src && script.textContent) {
+          const hash = createHash(script.textContent);
+          sendMessage({ type: 'getUrl', hash })
+            .then(response => {
+              const url = response.url;
+              if (url) {
+                if (self.matchesPattern(url, self.allowedPatterns)) {
+                  // Script is allowed, do nothing
+                } else if (self.matchesPattern(url, self.blockedPatterns)) {
+                  self.handleUnauthorizedExecution('blocked', script, {
+                    source: 'inline',
+                    origin: url
+                  });
+                  script.remove();
+                } else if (self.config.onBlocked) {
+                  self.handleUnauthorizedExecution('unknown-origin', script, {
+                    source: 'inline',
+                    origin: url
+                  });
+                }
+              }
+            })
+            .catch(error => {
+              console.error('Error validating inline script:', error);
+            });
+        }
+        
+        // Handle external scripts
+        if (script.src) {
+          try {
+            const scriptUrl = new URL(script.src, window.location.origin);
+            const fullUrl = scriptUrl.href;
+
+            // Check for Chrome extensions
+            if (self.config.blockExtensions && self.isChromeExtension(fullUrl)) {
+              self.handleUnauthorizedExecution('extension', script, {
+                source: 'external',
+                origin: scriptUrl.origin
+              });
+              script.remove();
+              return element;
+            }
+
+            // Check allowlist/blocklist
+            if (self.matchesPattern(fullUrl, self.allowedPatterns)) {
+              // Script is allowed, do nothing
+            } else if (self.matchesPattern(fullUrl, self.blockedPatterns)) {
+              self.handleUnauthorizedExecution('blocked', script, {
+                source: 'external',
+                origin: scriptUrl.origin
+              });
+              script.remove();
+            } else if (self.config.reportUnknownScripts && 
+                      (scriptUrl.protocol === 'http:' || scriptUrl.protocol === 'https:') && 
+                      scriptUrl.hostname !== window.location.hostname) {
+              if (!script.hasAttribute('data-pi-checked')) {
+                script.setAttribute('data-pi-checked', '1');
+                if (self.config.onBlocked) {
+                  self.handleUnauthorizedExecution('unknown-origin', script, {
+                    source: 'external',
+                    origin: scriptUrl.origin
+                  });
+                }
+              }
+            }
+          } catch (e) {
+            console.warn(`Failed to validate script URL: ${script.src}`);
+          }
+        }
+      }
+      
+      return element;
     };
   }
 
@@ -184,23 +279,14 @@ export class ScriptBlocker {
     });
   }
 
-  private handleUnauthorizedExecution(
-    type: BlockedEventInfo['type'],
-    target: Element | HTMLScriptElement,
-    context: BlockedEventInfo['context']
-  ): void {
-    const stack = new Error().stack || '';
-    const info: BlockedEventInfo = {
-      type,
-      target,
-      stackTrace: stack,
-      context
-    };
-
-    this.config.onBlocked?.(info);
-
-    if (target instanceof HTMLScriptElement) {
-      target.remove();
+  private handleUnauthorizedExecution(type: BlockedEventType, script: HTMLScriptElement, context: { source: ScriptSource; origin: string }) {
+    if (this.config.onBlocked) {
+      this.config.onBlocked({
+        type,
+        target: script,
+        stackTrace: new Error().stack || '',
+        context
+      });
     }
   }
 
