@@ -8,39 +8,91 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/nithin-murali-arch/page-integrity-js/pulls)
-[![PCI DSS Compliant](https://img.shields.io/badge/PCI%20DSS-Compliant-brightgreen)](https://www.pcisecuritystandards.org/)
-[![Security Audit](https://img.shields.io/badge/Security-Audit%20Ready-blue)](https://www.pcisecuritystandards.org/)
-[![XSS Prevention](https://img.shields.io/badge/XSS-Prevention%20Enabled-red)](https://www.pcisecuritystandards.org/)
 
-A library for monitoring and controlling DOM mutations and script execution, essential for PCI DSS compliance and security audits.
+> A powerful library for monitoring and controlling DOM mutations and script execution in web applications. Built with TypeScript and designed for security-first applications.
 
-## Features
+## ✨ Features
 
-- DOM mutation monitoring and control
-- Script execution blocking
-- PCI DSS compliance support
-- Security audit ready
-- XSS prevention
-- Service worker integration
+- 🔒 **Security First**: Monitor and control all DOM mutations
+- 🛡️ **Script Protection**: Block unauthorized script execution
+- 🔄 **Service Worker Integration**: Advanced script validation
+- ⚡ **Performance**: Minimal overhead with efficient monitoring
+- 📦 **Zero Dependencies**: Lightweight and self-contained
+- 🎯 **TypeScript Ready**: Full type definitions included
 
-## Installation
+## 📦 Installation
 
 ```bash
+# npm
 npm install page-integrity-js
+
+# yarn
+yarn add page-integrity-js
+
+# pnpm
+pnpm add page-integrity-js
 ```
 
-## Usage
+## 🚀 Quick Start
 
-### Browser Usage
+```typescript
+import { PageIntegrity } from 'page-integrity-js';
 
-1. Copy the service worker file to your public directory:
+// Initialize with configuration
+const integrity = new PageIntegrity({
+  whitelistedHosts: ['trusted-domain.com'],
+  blacklistedHosts: ['malicious-domain.com'],
+  onBlocked: (info) => {
+    console.warn('Blocked script execution:', info);
+  }
+});
+
+// Start monitoring
+integrity.setupBlocking();
+```
+
+## 🔧 Configuration
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `whitelistedHosts` | `string[]` | `[]` | List of trusted hostnames |
+| `blacklistedHosts` | `string[]` | `[]` | List of blocked hostnames |
+| `onBlocked` | `(info: BlockInfo) => void` | - | Callback for blocked scripts |
+| `skipCreateElementOverride` | `boolean` | `false` | Skip createElement override |
+
+### Example Configuration
+
+```typescript
+const config = {
+  whitelistedHosts: [
+    'cdn.trusted.com',
+    'api.secure.com'
+  ],
+  blacklistedHosts: [
+    'malicious.com',
+    'suspicious.net'
+  ],
+  onBlocked: (info) => {
+    // Log blocked scripts
+    console.warn('Blocked:', info);
+    
+    // Send to analytics
+    analytics.track('script_blocked', info);
+  }
+};
+```
+
+## 🔍 Service Worker Setup
+
+1. Copy the service worker to your public directory:
 ```bash
 cp node_modules/page-integrity-js/dist/service-worker.js public/page-integrity-sw.js
 ```
 
 2. Register the service worker:
-
-```javascript
+```typescript
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/page-integrity-sw.js')
     .then(registration => {
@@ -52,59 +104,7 @@ if ('serviceWorker' in navigator) {
 }
 ```
 
-3. Initialize Page Integrity:
-
-```javascript
-import { PageIntegrity } from 'page-integrity-js';
-
-const pageIntegrity = new PageIntegrity({
-  whitelistedHosts: ['trusted-domain.com'],
-  blacklistedHosts: ['malicious-domain.com'],
-  onBlocked: (info) => {
-    console.warn('Blocked script execution:', info);
-  }
-});
-
-// Start monitoring
-pageIntegrity.setupBlocking();
-```
-
-### TypeScript Usage
-
-```typescript
-import { PageIntegrity } from 'page-integrity-js';
-
-const pageIntegrity = new PageIntegrity({
-  whitelistedHosts: ['trusted-domain.com'],
-  blacklistedHosts: ['malicious-domain.com'],
-  onBlocked: (info) => {
-    console.warn('Blocked script execution:', info);
-  }
-});
-
-// Start monitoring
-pageIntegrity.setupBlocking();
-```
-
-## Configuration
-
-The `PageIntegrity` constructor accepts a configuration object with the following options:
-
-- `whitelistedHosts`: Array of trusted hostnames
-- `blacklistedHosts`: Array of blocked hostnames
-- `onBlocked`: Callback function for blocked script execution
-- `skipCreateElementOverride`: Boolean to skip createElement override
-
-## Service Worker
-
-The library includes a service worker that intercepts and validates script content. The service worker:
-
-- Intercepts fetch, XHR, and script element requests
-- Generates content hashes for validation
-- Implements LRU caching for performance
-- Communicates with the main thread via message passing
-
-## Development
+## 🛠️ Development
 
 ```bash
 # Install dependencies
@@ -115,28 +115,36 @@ npm run build
 
 # Run tests
 npm test
+
+# Run tests in watch mode
+npm run test:watch
 ```
 
-## Build Process
+## 📚 API Reference
 
-The project uses two separate TypeScript configurations:
-- `tsconfig.json` for the main library
-- `tsconfig.sw.json` for the service worker
+### PageIntegrity
 
-The build process:
-1. Cleans the dist directory
-2. Builds the main library
-3. Builds the service worker
+The main class for controlling page integrity.
 
-## PCI DSS Compliance
+#### Methods
 
-This library helps meet PCI DSS requirements by:
-- Preventing unauthorized DOM modifications
-- Blocking malicious script injections
-- Maintaining page integrity
-- Supporting security audits
-- Enabling XSS prevention
+- `setupBlocking()`: Start monitoring and blocking
+- `stopBlocking()`: Stop monitoring and blocking
+- `isBlocking()`: Check if monitoring is active
 
-## License
+#### Events
 
-MIT
+- `onBlocked`: Triggered when a script is blocked
+- `onMutation`: Triggered when DOM mutations occur
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+MIT © [Nithin Murali](https://github.com/nithin-murali-arch)
