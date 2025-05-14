@@ -1,18 +1,37 @@
 import { ScriptBlocker } from './script-blocker';
 
+/**
+ * Intercepts a script element and checks if it should be blocked.
+ * @param script The script element to check
+ * @param scriptBlocker The script blocker instance
+ */
 export async function interceptScriptElement(script: HTMLScriptElement, scriptBlocker: ScriptBlocker): Promise<void> {
   if (!scriptBlocker) {
     console.error('ScriptBlocker is not initialized');
     return;
   }
-  if (script.src) {
-    await scriptBlocker.shouldBlockScript(script.src, '');
-  } else if (script.textContent) {
-    await scriptBlocker.shouldBlockScript('inline', script.textContent);
+
+  try {
+    if (script.src) {
+      await scriptBlocker.shouldBlockScript(script.src, '');
+    } else if (script.textContent) {
+      await scriptBlocker.shouldBlockScript('inline', script.textContent);
+    }
+  } catch (error) {
+    console.error('Error intercepting script:', error);
   }
 }
 
+/**
+ * Intercepts global methods that can execute scripts.
+ * @param scriptBlocker The script blocker instance
+ */
 export function interceptGlobalMethods(scriptBlocker: ScriptBlocker): void {
+  if (!scriptBlocker) {
+    console.error('ScriptBlocker is not initialized');
+    return;
+  }
+
   const originalEval = window.eval;
   const originalFunction = Function;
   const originalSetTimeout = window.setTimeout;
@@ -66,25 +85,25 @@ export function interceptGlobalMethods(scriptBlocker: ScriptBlocker): void {
   };
 }
 
+/**
+ * Manages script interception and monitoring.
+ */
 export class ScriptInterceptor {
-  private static instance: ScriptInterceptor;
   private scriptBlocker: ScriptBlocker;
-  private originalCreateElement: typeof document.createElement = document.createElement;
-  private originalSetAttribute: typeof Element.prototype.setAttribute = Element.prototype.setAttribute;
-  private originalAppendChild: typeof Node.prototype.appendChild = Node.prototype.appendChild;
-  private originalInsertBefore: typeof Node.prototype.insertBefore = Node.prototype.insertBefore;
-  private originalReplaceChild: typeof Node.prototype.replaceChild = Node.prototype.replaceChild;
+  private originalCreateElement: typeof document.createElement;
+  private originalSetAttribute: typeof Element.prototype.setAttribute;
+  private originalAppendChild: typeof Node.prototype.appendChild;
+  private originalInsertBefore: typeof Node.prototype.insertBefore;
+  private originalReplaceChild: typeof Node.prototype.replaceChild;
   private _isRunning: boolean = false;
 
-  private constructor(scriptBlocker: ScriptBlocker) {
+  public constructor(scriptBlocker: ScriptBlocker) {
     this.scriptBlocker = scriptBlocker;
-  }
-
-  public static getInstance(): ScriptInterceptor {
-    if (!ScriptInterceptor.instance) {
-      ScriptInterceptor.instance = new ScriptInterceptor(ScriptBlocker.getInstance());
-    }
-    return ScriptInterceptor.instance;
+    this.originalCreateElement = document.createElement;
+    this.originalSetAttribute = Element.prototype.setAttribute;
+    this.originalAppendChild = Node.prototype.appendChild;
+    this.originalInsertBefore = Node.prototype.insertBefore;
+    this.originalReplaceChild = Node.prototype.replaceChild;
   }
 
   public static createInstance(scriptBlocker: ScriptBlocker): ScriptInterceptor {
@@ -95,14 +114,6 @@ export class ScriptInterceptor {
     if (this._isRunning) return;
     this._isRunning = true;
 
-    // Store original methods
-    this.originalCreateElement = document.createElement;
-    this.originalSetAttribute = Element.prototype.setAttribute;
-    this.originalAppendChild = Node.prototype.appendChild;
-    this.originalInsertBefore = Node.prototype.insertBefore;
-    this.originalReplaceChild = Node.prototype.replaceChild;
-
-    // Set up interceptors
     this.interceptCreateElement();
     this.interceptSetAttribute();
     this.interceptAppendChild();

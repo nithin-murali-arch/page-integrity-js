@@ -3,8 +3,8 @@
 import { RequestHandler } from './utils/request-handler';
 import { CacheManager } from './utils/cache-manager';
 
-const requestHandler = RequestHandler.getInstance();
-const cacheManager = CacheManager.getInstance();
+const cacheManager = new CacheManager();
+const requestHandler = new RequestHandler(cacheManager);
 
 self.addEventListener('fetch', (event: Event) => {
   const fetchEvent = event as FetchEvent;

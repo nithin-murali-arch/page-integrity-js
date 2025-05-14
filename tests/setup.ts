@@ -1,3 +1,6 @@
+import fetch, { Request, Response, Headers } from 'node-fetch';
+import { TextEncoder } from 'util';
+
 // Mock MutationObserver
 class MockMutationObserver implements MutationObserver {
   private callback: MutationCallback;
@@ -77,35 +80,6 @@ beforeEach(() => {
   document.createElement = trueOriginalCreateElement;
 });
 
-// Add test utilities to global scope
-(global as any).createMockScriptElement = (src?: string, text?: string): HTMLScriptElement => {
-  const script = document.createElement('script');
-  if (src) script.src = src;
-  if (text) script.textContent = text;
-  return script;
-};
-
-(global as any).simulateDOMChange = (target: Node, type: 'childList' | 'attributes' | 'characterData', changes: Partial<MutationRecord>): void => {
-  const mutation: MutationRecord = {
-    type,
-    target,
-    addedNodes: new MockNodeList(Array.isArray(changes.addedNodes) ? changes.addedNodes : []),
-    removedNodes: new MockNodeList(Array.isArray(changes.removedNodes) ? changes.removedNodes : []),
-    previousSibling: changes.previousSibling || null,
-    nextSibling: changes.nextSibling || null,
-    attributeName: changes.attributeName || null,
-    attributeNamespace: changes.attributeNamespace || null,
-    oldValue: changes.oldValue || null
-  };
-
-  const observer = (target as any)._observer as MockMutationObserver;
-  if (observer) {
-    observer.simulateMutation([mutation]);
-  }
-};
-
-(global as any).MockNodeList = MockNodeList;
-
 // Suppress console output during tests
 global.console = {
   ...console,
@@ -117,4 +91,21 @@ global.console = {
 };
 
 // After all imports, restore document.createElement to the true original
-document.createElement = trueOriginalCreateElement; 
+document.createElement = trueOriginalCreateElement;
+
+// Add type declarations
+declare global {
+  interface Window {
+    TextEncoder: typeof TextEncoder;
+    Request: typeof Request;
+    Response: typeof Response;
+    Headers: typeof Headers;
+  }
+}
+
+// Add global polyfills
+global.fetch = fetch as any;
+global.Request = Request as any;
+global.Response = Response as any;
+global.Headers = Headers as any;
+global.TextEncoder = TextEncoder; 

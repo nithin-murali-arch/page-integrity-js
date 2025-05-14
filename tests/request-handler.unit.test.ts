@@ -173,4 +173,9 @@ describe('RequestHandler', () => {
       expect(mockCacheManager.cacheResponse).not.toHaveBeenCalled();
     });
   });
+
+  it('should create new instance with provided cacheManager', () => {
+    const instance = new RequestHandler(mockCacheManager);
+    expect(instance).toBeInstanceOf(RequestHandler);
+  });
 }); 

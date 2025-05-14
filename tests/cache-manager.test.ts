@@ -36,7 +36,7 @@ describe('Cache Manager', () => {
     // Clear cache before each test
     cacheData = {};
     caches.delete('response-cache');
-    cacheManager = CacheManager.getInstance();
+    cacheManager = new CacheManager();
   });
 
   afterEach(async () => {
@@ -87,11 +87,5 @@ describe('Cache Manager', () => {
 
     const result = await cacheManager.getCachedResponse(hash);
     expect(result).toBeNull();
-  });
-
-  it('should maintain singleton instance', () => {
-    const instance1 = CacheManager.getInstance();
-    const instance2 = CacheManager.getInstance();
-    expect(instance1).toBe(instance2);
   });
 }); 

@@ -33,20 +33,12 @@ export async function analyzeAndBlockScript(content: string, url: string, cacheM
 }
 
 export class ScriptBlocker {
-  private static instance: ScriptBlocker;
   private cacheManager: CacheManager;
   private blockedScripts: Map<string, BlockedScript>;
 
-  private constructor(cacheManager: CacheManager) {
+  public constructor(cacheManager: CacheManager) {
     this.cacheManager = cacheManager;
     this.blockedScripts = new Map();
-  }
-
-  public static getInstance(): ScriptBlocker {
-    if (!ScriptBlocker.instance) {
-      ScriptBlocker.instance = new ScriptBlocker(CacheManager.getInstance());
-    }
-    return ScriptBlocker.instance;
   }
 
   public static createInstance(cacheManager: CacheManager): ScriptBlocker {

@@ -1,183 +1,257 @@
 # Page Integrity JS
 
-[![npm version](https://img.shields.io/npm/v/page-integrity-js.svg)](https://www.npmjs.com/package/page-integrity-js)
-[![npm downloads](https://img.shields.io/npm/dm/page-integrity-js.svg)](https://www.npmjs.com/package/page-integrity-js)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/nithin-murali-arch/page-integrity-js/test.yml?branch=main)](https://github.com/nithin-murali-arch/page-integrity-js/actions)
-[![Coverage](https://img.shields.io/codecov/c/github/nithin-murali-arch/page-integrity-js)](https://codecov.io/gh/nithin-murali-arch/page-integrity-js)
-[![Bundle Size](https://img.shields.io/bundlephobia/min/page-integrity-js)](https://bundlephobia.com/package/page-integrity-js)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/nithin-murali-arch/page-integrity-js/pulls)
+A robust JavaScript library for protecting web applications against malicious script injections and unauthorized script executions. Page Integrity JS provides a comprehensive solution for script security, offering both static and dynamic script analysis, caching mechanisms, and configurable blocking rules.
 
-> A powerful library for monitoring and controlling DOM mutations and script execution in web applications. Built with TypeScript and designed for security-first applications.
+## Features
 
-## ✨ Features
+- 🔒 **Script Security**: Protect against malicious script injections and unauthorized script executions
+- 🛡️ **Multiple Protection Layers**:
+  - Static analysis of script content
+  - Dynamic analysis of script behavior
+  - Origin-based blocking rules
+  - Hash-based script verification
+- ⚡ **Performance Optimized**:
+  - Efficient script analysis
+  - Response caching
+  - Minimal performance impact
+- 🔄 **Flexible Configuration**:
+  - Whitelist/blacklist domains
+  - Custom blocking rules
+  - Configurable analysis depth
+- 🛠️ **Developer Friendly**:
+  - TypeScript support
+  - Comprehensive API
+  - Detailed documentation
+  - Extensive test coverage
 
-- 🔒 **Security First**: Monitor and control all DOM mutations
-- 🛡️ **Script Protection**: Block unauthorized script execution
-- 🔄 **Service Worker Integration**: Advanced script validation
-- ⚡ **Performance**: Minimal overhead with efficient monitoring
-- 📦 **Zero Dependencies**: Lightweight and self-contained
-- 🎯 **TypeScript Ready**: Full type definitions included
-
-## 📦 Installation
+## Installation
 
 ```bash
-# npm
 npm install page-integrity-js
-
-# yarn
-yarn add page-integrity-js
-
-# pnpm
-pnpm add page-integrity-js
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ```typescript
 import { PageIntegrity } from 'page-integrity-js';
 
 // Initialize with configuration
-const integrity = new PageIntegrity({
-  // Allow specific trusted scripts
-  allowedHosts: [
-    'https://cdn.trusted.com/scripts/main.js',  // Absolute URL
-    'https://api.trusted.com/*',                // Pattern for all API scripts
-    '*.trusted-domain.com'                      // Pattern for all subdomains
-  ],
-  // Block specific malicious scripts
-  blockedHosts: [
-    'https://malicious.com/evil.js',            // Absolute URL
-    'https://*.malicious.com/*',                // Pattern for all malicious scripts
-    'http://dangerous.net/*'                    // Pattern for all HTTP scripts
-  ],
-  blockExtensions: true,
-  reportUnknownScripts: true,
-  onBlocked: (info) => {
-    console.warn('Blocked script execution:', info);
+const pageIntegrity = new PageIntegrity({
+  whitelistedHosts: ['trusted-domain.com'],
+  blacklistedHosts: ['malicious-domain.com'],
+  onBlocked: (event) => {
+    console.log('Blocked script:', event);
   }
 });
-
-// Start monitoring
-integrity.setupBlocking();
 ```
 
-## 🔧 Configuration
-
-### Options
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `allowedHosts` | `string[]` | `[]` | List of trusted hosts and patterns (supports wildcards and absolute URLs) |
-| `blockedHosts` | `string[]` | `[]` | List of blocked hosts and patterns (supports wildcards and absolute URLs) |
-| `blockExtensions` | `boolean` | `false` | Whether to block Chrome extensions |
-| `reportUnknownScripts` | `boolean` | `false` | Whether to report scripts not in allowlist/blocklist |
-| `onBlocked` | `(info: BlockInfo) => void` | - | Callback for blocked scripts |
-| `skipCreateElementOverride` | `boolean` | `false` | Skip createElement override |
-
-### Example Configuration
+## Configuration Options
 
 ```typescript
-const config = {
-  allowedHosts: [
-    // Absolute URLs
-    'https://cdn.trusted.com/scripts/main.js',
-    'https://api.trusted.com/auth.js',
-    // Patterns
-    'https://*.trusted.com/*',
-    'https://trusted.com/api/*'
-  ],
-  blockedHosts: [
-    // Absolute URLs
-    'https://malicious.com/evil.js',
-    'http://dangerous.net/script.js',
-    // Patterns
-    'https://*.malicious.com/*',
-    'http://dangerous.net/*'
-  ],
-  blockExtensions: true,
-  reportUnknownScripts: true,
-  onBlocked: (info) => {
-    // Log blocked scripts
-    console.warn('Blocked:', info);
-    
-    // Send to analytics
-    analytics.track('script_blocked', info);
-  }
-};
-```
-
-## 🔍 Service Worker Setup
-
-1. Copy the service worker to your public directory:
-```bash
-cp node_modules/page-integrity-js/dist/service-worker.js public/page-integrity-sw.js
-```
-
-2. Register the service worker:
-```typescript
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/page-integrity-sw.js')
-    .then(registration => {
-      console.log('Service Worker registered:', registration);
-    })
-    .catch(error => {
-      console.error('Service Worker registration failed:', error);
-    });
+interface PageIntegrityConfig {
+  // List of trusted domains
+  whitelistedHosts?: string[];
+  
+  // List of blocked domains
+  blacklistedHosts?: string[];
+  
+  // Allow dynamic inline scripts
+  allowDynamicInline?: boolean;
+  
+  // Callback for blocked scripts
+  onBlocked?: (event: BlockedScriptEvent) => void;
+  
+  // Cache configuration
+  cacheConfig?: {
+    enabled: boolean;
+    maxAge: number;
+  };
 }
 ```
 
-## 🛠️ Development
+## Advanced Usage
 
-```bash
-# Install dependencies
-npm install
+### Domain Pattern Examples
 
-# Build the project
-npm run build
+Page Integrity JS supports various patterns for whitelisting and blacklisting domains and specific scripts:
 
-# Run tests
-npm test
+```typescript
+const pageIntegrity = new PageIntegrity({
+  whitelistedHosts: [
+    // Exact domain match
+    'trusted-domain.com',
+    
+    // Wildcard subdomain
+    '*.trusted-domain.com',
+    
+    // Specific path
+    'trusted-domain.com/scripts/*',
+    
+    // Multiple subdomains
+    'api.trusted-domain.com',
+    'cdn.trusted-domain.com',
+    
+    // Protocol specific
+    'https://trusted-domain.com',
+    
+    // Port specific
+    'trusted-domain.com:8080',
+    
+    // Complex patterns
+    'https://*.trusted-domain.com/scripts/*',
+    'https://trusted-domain.com/api/*',
 
-# Run tests in watch mode
-npm run test:watch
+    // Specific script files
+    'trusted-domain.com/scripts/main.js',
+    'cdn.trusted-domain.com/vendor/jquery.min.js',
+    'https://trusted-domain.com/dist/bundle.js',
+    
+    // Scripts with query parameters
+    'trusted-domain.com/script.js?v=1.0.0',
+    'trusted-domain.com/script.js?version=2.1.0',
+    
+    // Scripts with specific hashes
+    'trusted-domain.com/script.js#sha256-abc123',
+    'trusted-domain.com/script.js#integrity=sha384-xyz789'
+  ],
+  
+  blacklistedHosts: [
+    // Block specific malicious domains
+    'malicious-domain.com',
+    
+    // Block all subdomains
+    '*.malicious-domain.com',
+    
+    // Block specific paths
+    'malicious-domain.com/evil/*',
+    
+    // Block HTTP (non-secure) scripts
+    'http://dangerous-domain.com/*',
+    
+    // Block specific ports
+    'malicious-domain.com:8080',
+    
+    // Block specific file types
+    'malicious-domain.com/*.js',
+    
+    // Block multiple patterns
+    'malicious-domain.com',
+    'dangerous-domain.com',
+    '*.suspicious-domain.com',
+
+    // Block specific script files
+    'malicious-domain.com/evil.js',
+    'dangerous-domain.com/inject.js',
+    'https://malicious-domain.com/steal.js',
+    
+    // Block scripts with specific query parameters
+    'malicious-domain.com/script.js?inject=true',
+    'dangerous-domain.com/script.js?bypass=true',
+    
+    // Block scripts with specific hashes
+    'malicious-domain.com/script.js#sha256-known-bad-hash',
+    'dangerous-domain.com/script.js#integrity=sha384-known-bad-hash'
+  ],
+  
+  // Allow dynamic inline scripts (use with caution)
+  allowDynamicInline: false,
+  
+  // Handle blocked scripts
+  onBlocked: (event) => {
+    console.log('Blocked script:', {
+      url: event.url,
+      reason: event.reason,
+      timestamp: event.timestamp
+    });
+    
+    // Optionally report to your analytics
+    analytics.track('script_blocked', event);
+  }
+});
 ```
 
-## 📚 API Reference
+### Common Use Cases
 
-### PageIntegrity
-
-The main class for controlling page integrity.
-
-#### Methods
-
-- `setupBlocking()`: Start monitoring and blocking
-- `stopBlocking()`: Stop monitoring and blocking
-- `isBlocking()`: Check if monitoring is active
-
-#### Events
-
-- `onBlocked`: Triggered when a script is blocked
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-MIT © [Nithin Murali](https://github.com/nithin-murali-arch)
-
-## Running Tests
-
-To run the tests in parallel and speed up execution, use:
-
-```sh
-npx jest --maxWorkers=100%
+1. **Basic Security Setup**:
+```typescript
+const pageIntegrity = new PageIntegrity({
+  whitelistedHosts: ['cdn.trusted-domain.com'],
+  blacklistedHosts: ['malicious-domain.com'],
+  allowDynamicInline: false
+});
 ```
 
-This will utilize all available CPU cores for test execution.
+2. **Multi-CDN Setup**:
+```typescript
+const pageIntegrity = new PageIntegrity({
+  whitelistedHosts: [
+    'cdn1.trusted-domain.com',
+    'cdn2.trusted-domain.com',
+    'cdn3.trusted-domain.com'
+  ],
+  allowDynamicInline: false
+});
+```
+
+3. **Development Environment**:
+```typescript
+const pageIntegrity = new PageIntegrity({
+  whitelistedHosts: [
+    'localhost:3000',
+    'localhost:8080',
+    '*.local',
+    'dev.trusted-domain.com'
+  ],
+  allowDynamicInline: true // More permissive in development
+});
+```
+
+4. **Production Environment**:
+```typescript
+const pageIntegrity = new PageIntegrity({
+  whitelistedHosts: [
+    'https://cdn.trusted-domain.com',
+    'https://api.trusted-domain.com'
+  ],
+  allowDynamicInline: false,
+  onBlocked: (event) => {
+    // Log to your monitoring service
+    monitoringService.log('script_blocked', event);
+  }
+});
+```
+
+## Security Considerations
+
+- **Script Analysis**: The library performs both static and dynamic analysis of scripts to detect potential threats
+- **Origin Verification**: Scripts are verified against whitelisted and blacklisted domains
+- **Hash Verification**: Script content is hashed and verified against known good/bad hashes
+- **Cache Security**: Cached responses are stored securely and verified before use
+
+## Performance
+
+Page Integrity JS is designed to minimize performance impact:
+
+- Efficient script analysis algorithms
+- Response caching to reduce analysis overhead
+- Configurable analysis depth for different security needs
+- Minimal memory footprint
+
+## Browser Support
+
+- Chrome (latest)
+- Firefox (latest)
+- Safari (latest)
+- Edge (latest)
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## Support
+
+For support, please [open an issue](https://github.com/yourusername/page-integrity-js/issues) or contact us at support@example.com.

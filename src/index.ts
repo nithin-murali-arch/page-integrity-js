@@ -70,7 +70,7 @@ export function mergeConfig(defaults: PageIntegrityConfig, config: PageIntegrity
 }
 
 export function initScriptBlocker(config: PageIntegrityConfig, cacheManager: CacheManager): ScriptBlocker {
-  return ScriptBlocker.createInstance(cacheManager);
+  return new ScriptBlocker(cacheManager);
 }
 
 export function exposeGlobally(cls: any, name: string): void {
@@ -102,7 +102,7 @@ export class PageIntegrity {
    */
   constructor(config: PageIntegrityConfig) {
     this.config = mergeConfig({ allowDynamicInline: true }, config);
-    this.cacheManager = CacheManager.getInstance();
+    this.cacheManager = new CacheManager();
     this.scriptBlocker = initScriptBlocker(this.config, this.cacheManager);
     exposeGlobally(PageIntegrity, 'PageIntegrity');
   }
@@ -114,13 +114,6 @@ export class PageIntegrity {
   public updateConfig(newConfig: Partial<PageIntegrityConfig>): void {
     this.config = { ...this.config, ...newConfig };
     this.scriptBlocker = initScriptBlocker(this.config, this.cacheManager);
-  }
-
-  /**
-   * Stop monitoring the page for unauthorized scripts and DOM mutations.
-   */
-  public stop(): void {
-    // No longer needed as MutationMonitor is removed
   }
 }
 

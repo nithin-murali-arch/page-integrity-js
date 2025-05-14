@@ -2,12 +2,6 @@
  * Core types for Page Integrity JS
  */
 
-/** Type of mutation that occurred */
-export type MutationType = 'insert' | 'update' | 'remove';
-
-/** Type of HTML element that can be modified */
-export type ElementType = 'div' | 'span' | 'p' | 'a' | 'img' | 'button';
-
 /** Source of a script */
 export type ScriptSource = 'inline' | 'external' | 'extension' | 'unknown';
 
@@ -55,40 +49,6 @@ export interface ScriptInfo {
   isExtension: boolean;
   /** Whether the script is from a first-party source */
   isFirstParty: boolean;
-}
-
-/** Context information for a mutation */
-export interface MutationContext {
-  /** Parent element of the mutated element */
-  parentElement: Element | null;
-  /** Previous sibling of the mutated element */
-  previousSibling: Element | null;
-  /** Next sibling of the mutated element */
-  nextSibling: Element | null;
-}
-
-/** Information about a mutation */
-export interface MutationInfo {
-  /** Target element that was mutated */
-  target: Element;
-  /** Type of mutation */
-  type: MutationType;
-  /** Timestamp of the mutation */
-  timestamp: number;
-  /** Hash of the script that caused the mutation */
-  scriptHash: string;
-  /** Context information about the mutation */
-  context: MutationContext;
-}
-
-/** Configuration for allowed mutations */
-export interface AllowedMutations {
-  /** Types of elements that can be modified */
-  elementTypes: ElementType[];
-  /** Attributes that can be modified */
-  attributes: string[];
-  /** Patterns for allowed attributes */
-  patterns: RegExp[];
 }
 
 /** Configuration for the PageIntegrity library */

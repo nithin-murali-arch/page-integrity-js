@@ -32,18 +32,10 @@ export async function cacheNonScript(text: string, url: string, cacheManager: Ca
 }
 
 export class RequestHandler {
-  private static instance: RequestHandler;
   private cacheManager: CacheManager;
 
-  private constructor(cacheManager: CacheManager) {
+  public constructor(cacheManager: CacheManager) {
     this.cacheManager = cacheManager;
-  }
-
-  public static getInstance(): RequestHandler {
-    if (!RequestHandler.instance) {
-      RequestHandler.instance = new RequestHandler(CacheManager.getInstance());
-    }
-    return RequestHandler.instance;
   }
 
   public static createInstance(cacheManager: CacheManager): RequestHandler {

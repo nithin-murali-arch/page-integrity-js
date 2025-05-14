@@ -35,8 +35,8 @@ describe('PageIntegrity', () => {
       cacheResponse: jest.fn()
     } as any;
 
-    (ScriptBlocker.createInstance as jest.Mock).mockReturnValue(mockScriptBlocker);
-    (CacheManager.getInstance as jest.Mock).mockReturnValue(mockCacheManager);
+    (ScriptBlocker as unknown as jest.Mock).mockImplementation(() => mockScriptBlocker);
+    (CacheManager as unknown as jest.Mock).mockImplementation(() => mockCacheManager);
 
     // Clean up global for each test
     (window as any).PageIntegrity = undefined;
@@ -82,7 +82,7 @@ describe('PageIntegrity', () => {
         ...config,
         ...newConfig
       });
-      expect(ScriptBlocker.createInstance).toHaveBeenCalledTimes(2);
+      expect(ScriptBlocker).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -1,5 +1,7 @@
-import { ScriptInterceptor } from './utils/script-interceptor';
 import { ScriptBlocker } from './utils/script-blocker';
+import { ScriptInterceptor } from './utils/script-interceptor';
+
+export { ScriptBlocker };
 
 export interface ScriptBlockingDependencies {
   scriptInterceptor: ScriptInterceptor;
@@ -24,6 +26,4 @@ export function getBlockedScriptsCount(deps: ScriptBlockingDependencies): number
 
 export function clearBlockedScripts(deps: ScriptBlockingDependencies): void {
   deps.scriptBlocker.clearBlockedScripts();
-}
-
-export { ScriptBlocker }; 
+} 

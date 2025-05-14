@@ -9,20 +9,12 @@ export interface CacheEntry {
 }
 
 export class CacheManager {
-  private static instance: CacheManager;
   private cacheName: string;
   private maxSize: number;
 
-  private constructor(cacheName: string = CACHE_NAME, maxSize: number = MAX_CACHE_SIZE) {
+  public constructor(cacheName: string = CACHE_NAME, maxSize: number = MAX_CACHE_SIZE) {
     this.cacheName = cacheName;
     this.maxSize = maxSize;
-  }
-
-  public static getInstance(): CacheManager {
-    if (!CacheManager.instance) {
-      CacheManager.instance = new CacheManager();
-    }
-    return CacheManager.instance;
   }
 
   public async cacheResponse(hash: string, url: string, analysis?: ScriptAnalysis): Promise<void> {
