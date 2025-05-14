@@ -1,55 +1,29 @@
 /// <reference lib="webworker" />
 
-import { createHash } from './utils/hash';
+import { RequestHandler } from './utils/request-handler';
+import { CacheManager } from './utils/cache-manager';
 
-const CACHE_NAME = 'response-cache';
-const MAX_CACHE_SIZE = 2500;
+const requestHandler = RequestHandler.getInstance();
+const cacheManager = CacheManager.getInstance();
 
 self.addEventListener('fetch', (event: Event) => {
   const fetchEvent = event as FetchEvent;
-  fetchEvent.respondWith(
-    fetch(fetchEvent.request)
-      .then(response => {
-        const clonedResponse = response.clone();
-        clonedResponse.text().then(text => {
-          const hash = createHash(text);
-          const url = fetchEvent.request.url;
-          cacheResponse(hash, url);
-        });
-        return response;
-      })
-      .catch(error => {
-        console.error('Fetch error:', error);
-        throw error;
-      })
-  );
+  fetchEvent.respondWith(requestHandler.handleFetch(fetchEvent.request));
 });
-
-function cacheResponse(hash: string, url: string): void {
-  caches.open(CACHE_NAME).then(cache => {
-    cache.put(hash, new Response(url));
-    // Implement LRU by limiting cache size
-    cache.keys().then(keys => {
-      if (keys.length > MAX_CACHE_SIZE) {
-        cache.delete(keys[0]);
-      }
-    });
-  });
-}
 
 self.addEventListener('message', (event: MessageEvent) => {
   if (event.data.type === 'getUrl') {
     const hash = event.data.hash;
-    caches.open(CACHE_NAME).then(cache => {
-      cache.match(hash).then(response => {
-        if (response) {
-          response.text().then(url => {
-            event.source?.postMessage({ type: 'url', url });
-          });
-        } else {
-          event.source?.postMessage({ type: 'url', url: null });
-        }
-      });
+    cacheManager.getCachedResponse(hash).then(data => {
+      if (data) {
+        event.source?.postMessage({ 
+          type: 'url', 
+          url: data.url,
+          analysis: data.analysis 
+        });
+      } else {
+        event.source?.postMessage({ type: 'url', url: null });
+      }
     });
   }
 });
@@ -58,12 +32,13 @@ self.addEventListener('message', (event: MessageEvent) => {
 self.addEventListener('message', (event: MessageEvent) => {
   if (event.data.type === 'xhr') {
     const { url, method, body } = event.data;
-    fetch(url, { method, body })
-      .then(response => response.text())
-      .then(text => {
-        const hash = createHash(text);
-        cacheResponse(hash, url);
-        event.source?.postMessage({ type: 'xhrResponse', hash });
+    requestHandler.handleXhrRequest(url, method, body)
+      .then(({ hash, analysis }) => {
+        event.source?.postMessage({ 
+          type: 'xhrResponse', 
+          hash,
+          analysis 
+        });
       })
       .catch(error => {
         console.error('XHR error:', error);
@@ -76,12 +51,13 @@ self.addEventListener('message', (event: MessageEvent) => {
 self.addEventListener('message', (event: MessageEvent) => {
   if (event.data.type === 'script') {
     const { url } = event.data;
-    fetch(url)
-      .then(response => response.text())
-      .then(text => {
-        const hash = createHash(text);
-        cacheResponse(hash, url);
-        event.source?.postMessage({ type: 'scriptResponse', hash });
+    requestHandler.handleScriptRequest(url)
+      .then(({ hash, analysis }) => {
+        event.source?.postMessage({ 
+          type: 'scriptResponse', 
+          hash,
+          analysis 
+        });
       })
       .catch(error => {
         console.error('Script error:', error);

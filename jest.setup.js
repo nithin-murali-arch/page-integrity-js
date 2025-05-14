@@ -7,9 +7,22 @@ global.Response = class {
   constructor(body, init) {
     this.body = body;
     this.init = init;
+    const headersObj = (init && init.headers) ? init.headers : {};
+    this.headers = {
+      get: (key) => {
+        // Support both lower and original case
+        const foundKey = Object.keys(headersObj).find(
+          k => k.toLowerCase() === key.toLowerCase()
+        );
+        return foundKey ? headersObj[foundKey] : undefined;
+      }
+    };
   }
   text() {
     return Promise.resolve(this.body);
+  }
+  clone() {
+    return new global.Response(this.body, this.init);
   }
 };
 

@@ -171,3 +171,13 @@ The main class for controlling page integrity.
 ## 📄 License
 
 MIT © [Nithin Murali](https://github.com/nithin-murali-arch)
+
+## Running Tests
+
+To run the tests in parallel and speed up execution, use:
+
+```sh
+npx jest --maxWorkers=100%
+```
+
+This will utilize all available CPU cores for test execution.

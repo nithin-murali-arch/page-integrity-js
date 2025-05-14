@@ -8,6 +8,7 @@
 
 import { PageIntegrityConfig, BlockedEventInfo } from './types';
 import { ScriptBlocker } from './script-blocking';
+import { CacheManager } from './utils/cache-manager';
 
 // Types
 export type MutationType = 'insert' | 'update' | 'remove';
@@ -64,6 +65,20 @@ export interface AllowedMutations {
   patterns: RegExp[];
 }
 
+export function mergeConfig(defaults: PageIntegrityConfig, config: PageIntegrityConfig): PageIntegrityConfig {
+  return { ...defaults, ...config };
+}
+
+export function initScriptBlocker(config: PageIntegrityConfig, cacheManager: CacheManager): ScriptBlocker {
+  return ScriptBlocker.createInstance(cacheManager);
+}
+
+export function exposeGlobally(cls: any, name: string): void {
+  if (typeof window !== 'undefined') {
+    (window as any)[name] = cls;
+  }
+}
+
 /**
  * Main class for monitoring and enforcing page integrity.
  *
@@ -79,21 +94,17 @@ export interface AllowedMutations {
 export class PageIntegrity {
   private config: PageIntegrityConfig;
   private scriptBlocker: ScriptBlocker;
+  private cacheManager: CacheManager;
 
   /**
    * Create a new PageIntegrity instance.
    * @param config Configuration options for script and DOM mutation monitoring.
    */
   constructor(config: PageIntegrityConfig) {
-    this.config = {
-      allowDynamicInline: true,
-      ...config
-    };
-    this.scriptBlocker = new ScriptBlocker(this.config);
-    this.scriptBlocker.setupBlocking();
-    if (typeof window !== 'undefined') {
-      (window as any).PageIntegrity = PageIntegrity;
-    }
+    this.config = mergeConfig({ allowDynamicInline: true }, config);
+    this.cacheManager = CacheManager.getInstance();
+    this.scriptBlocker = initScriptBlocker(this.config, this.cacheManager);
+    exposeGlobally(PageIntegrity, 'PageIntegrity');
   }
 
   /**
@@ -102,8 +113,7 @@ export class PageIntegrity {
    */
   public updateConfig(newConfig: Partial<PageIntegrityConfig>): void {
     this.config = { ...this.config, ...newConfig };
-    this.scriptBlocker.updateConfig(this.config);
-    this.scriptBlocker.setupBlocking();
+    this.scriptBlocker = initScriptBlocker(this.config, this.cacheManager);
   }
 
   /**
