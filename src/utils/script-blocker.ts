@@ -1,6 +1,7 @@
-import { analyzeScript } from './script-analyzer';
+import { analyzeScript as analyzeScriptContent } from './script-analyzer';
 import { createHash } from './hash';
 import { CacheManager } from './cache-manager';
+import { PageIntegrityConfig } from '../types';
 
 export interface BlockedScript {
   url: string;
@@ -8,25 +9,25 @@ export interface BlockedScript {
   analysis?: any;
 }
 
-export async function checkCachedResponse(hash: string, cacheManager: CacheManager): Promise<{ blocked: boolean; reason?: string; analysis?: any } | null> {
-  const cachedResponse = await cacheManager.getCachedResponse(hash);
-  if (cachedResponse?.analysis) {
-    if (cachedResponse.analysis.isMalicious) {
-      return { blocked: true, reason: 'Malicious script detected', analysis: cachedResponse.analysis };
-    }
-    return { blocked: false, analysis: cachedResponse.analysis };
+export async function checkCachedResponse(cacheManager: CacheManager, url: string, content: string): Promise<{ blocked: boolean; reason?: string; analysis?: any }> {
+  const hash = createHash(content);
+  const cached = await cacheManager.getCachedResponse(hash);
+  if (cached && cached.analysis) {
+    const score = typeof cached.analysis.score === 'number' ? cached.analysis.score : 0;
+    const threats = Array.isArray(cached.analysis.threats) ? cached.analysis.threats : [];
+    const isMalicious = score >= 3 || threats.length >= 2;
+    return { blocked: isMalicious, reason: cached.reason || 'Cached block', analysis: cached.analysis };
   }
-  return null;
+  return { blocked: false };
 }
 
-export async function analyzeAndBlockScript(content: string, url: string, cacheManager: CacheManager, blockedScripts: Map<string, BlockedScript>): Promise<{ blocked: boolean; reason?: string; analysis?: any }> {
-  const analysis = analyzeScript(content);
-  if (analysis.isMalicious) {
-    blockedScripts.set(url, {
-      url,
-      reason: 'Malicious script detected',
-      analysis
-    });
+export async function analyzeAndBlockScript(scriptBlocker: ScriptBlocker, url: string, content: string): Promise<{ blocked: boolean; reason?: string; analysis?: any }> {
+  const analysis = analyzeScriptContent(content);
+  const config = scriptBlocker['config']?.analysisConfig;
+  if (!config) {
+    return { blocked: false, analysis };
+  }
+  if (analysis.score >= config.minScore || analysis.threats.length >= config.maxThreats) {
     return { blocked: true, reason: 'Malicious script detected', analysis };
   }
   return { blocked: false, analysis };
@@ -35,30 +36,45 @@ export async function analyzeAndBlockScript(content: string, url: string, cacheM
 export class ScriptBlocker {
   private cacheManager: CacheManager;
   private blockedScripts: Map<string, BlockedScript>;
+  private config: PageIntegrityConfig;
 
-  public constructor(cacheManager: CacheManager) {
+  public constructor(cacheManager: CacheManager, config: PageIntegrityConfig) {
     this.cacheManager = cacheManager;
     this.blockedScripts = new Map();
-  }
-
-  public static createInstance(cacheManager: CacheManager): ScriptBlocker {
-    return new ScriptBlocker(cacheManager);
+    this.config = config;
   }
 
   public async shouldBlockScript(url: string, content: string): Promise<{ blocked: boolean; reason?: string; analysis?: any }> {
-    const hash = createHash(content);
-    const cachedResult = await checkCachedResponse(hash, this.cacheManager);
-    if (cachedResult) {
-      if (cachedResult.blocked) {
-        this.blockedScripts.set(url, {
-          url,
-          reason: cachedResult.reason || 'Malicious script detected',
-          analysis: cachedResult.analysis
-        });
-      }
-      return cachedResult;
+    // Check if script is blacklisted
+    const isBlacklisted = this.config.blacklistedHosts?.some(host => url.includes(host));
+    if (isBlacklisted) {
+      this.blockedScripts.set(url, {
+        url,
+        reason: 'Blacklisted script'
+      });
+      return { blocked: true, reason: 'Blacklisted script' };
     }
-    return analyzeAndBlockScript(content, url, this.cacheManager, this.blockedScripts);
+
+    // Check cache first
+    const cached = await checkCachedResponse(this.cacheManager, url, content);
+    if (cached.blocked) {
+      this.blockedScripts.set(url, {
+        url,
+        reason: cached.reason || 'Cached block',
+        analysis: cached.analysis
+      });
+      return cached;
+    }
+
+    // Analyze script for monitoring
+    const analysis = analyzeScriptContent(content);
+    this.blockedScripts.set(url, {
+      url,
+      reason: 'Script analyzed',
+      analysis
+    });
+    
+    return { blocked: false, analysis };
   }
 
   public isScriptBlocked(url: string): boolean {

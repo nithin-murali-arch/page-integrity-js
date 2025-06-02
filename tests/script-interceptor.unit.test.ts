@@ -13,7 +13,7 @@ describe('Script Interceptor', () => {
       clearBlockedScripts: jest.fn()
     } as unknown as jest.Mocked<ScriptBlocker>;
 
-    scriptInterceptor = ScriptInterceptor.createInstance(mockScriptBlocker);
+    scriptInterceptor = new ScriptInterceptor(mockScriptBlocker);
   });
 
   afterEach(() => {
@@ -22,7 +22,7 @@ describe('Script Interceptor', () => {
 
   describe('ScriptInterceptor class', () => {
     it('should create new instance with provided scriptBlocker', () => {
-      const instance = ScriptInterceptor.createInstance(mockScriptBlocker);
+      const instance = new ScriptInterceptor(mockScriptBlocker);
       expect(instance).toBeInstanceOf(ScriptInterceptor);
     });
 
@@ -77,6 +77,15 @@ describe('Script Interceptor', () => {
       expect(consoleSpy).toHaveBeenCalledWith('ScriptBlocker is not initialized');
       consoleSpy.mockRestore();
     });
+
+    it('should remove script if blocked', async () => {
+      mockScriptBlocker.shouldBlockScript.mockResolvedValueOnce({ blocked: true, reason: 'Blocked' });
+      const script = document.createElement('script');
+      script.src = 'https://example.com/script.js';
+      document.body.appendChild(script);
+      await interceptScriptElement(script, mockScriptBlocker);
+      expect(script.parentNode).toBeNull();
+    });
   });
 
   describe('interceptGlobalMethods', () => {
@@ -105,39 +114,40 @@ describe('Script Interceptor', () => {
       window.fetch = originalFetch;
     });
 
-    it('should intercept eval', () => {
+    it('should intercept eval', async () => {
       interceptGlobalMethods(mockScriptBlocker);
-      window.eval('console.log("test");');
+      await window.eval('console.log("test");');
       expect(mockScriptBlocker.shouldBlockScript).toHaveBeenCalledWith('eval', 'console.log("test");');
     });
 
-    it('should intercept Function constructor', () => {
+    it('should intercept Function constructor', async () => {
       interceptGlobalMethods(mockScriptBlocker);
-      new Function('console.log("test");');
+      await new Function('console.log("test");');
       expect(mockScriptBlocker.shouldBlockScript).toHaveBeenCalledWith('Function', 'console.log("test");');
     });
 
-    it('should intercept setTimeout with string handler', () => {
+    it('should intercept setTimeout with string handler', async () => {
       interceptGlobalMethods(mockScriptBlocker);
-      window.setTimeout('console.log("test");', 0);
+      await window.setTimeout('console.log("test");', 0);
       expect(mockScriptBlocker.shouldBlockScript).toHaveBeenCalledWith('setTimeout', 'console.log("test");');
     });
 
-    it('should intercept setInterval with string handler', () => {
+    it('should intercept setInterval with string handler', async () => {
       interceptGlobalMethods(mockScriptBlocker);
-      window.setInterval('console.log("test");', 0);
+      await window.setInterval('console.log("test");', 0);
       expect(mockScriptBlocker.shouldBlockScript).toHaveBeenCalledWith('setInterval', 'console.log("test");');
     });
 
-    it('should intercept XHR open with .js URL', () => {
+    it('should intercept XHR open with .js URL', async () => {
       interceptGlobalMethods(mockScriptBlocker);
       const xhr = new XMLHttpRequest();
-      xhr.open('GET', 'https://example.com/script.js');
+      await xhr.open('GET', 'https://example.com/script.js');
       expect(mockScriptBlocker.shouldBlockScript).toHaveBeenCalledWith('https://example.com/script.js', '');
     });
 
     it('should intercept fetch with .js URL', async () => {
-      await mockScriptBlocker.shouldBlockScript('https://example.com/script.js', '');
+      interceptGlobalMethods(mockScriptBlocker);
+      await window.fetch('https://example.com/script.js');
       expect(mockScriptBlocker.shouldBlockScript).toHaveBeenCalledWith('https://example.com/script.js', '');
     });
 
@@ -146,6 +156,47 @@ describe('Script Interceptor', () => {
       interceptGlobalMethods(null as unknown as ScriptBlocker);
       expect(consoleSpy).toHaveBeenCalledWith('ScriptBlocker is not initialized');
       consoleSpy.mockRestore();
+    });
+
+    it('should block eval when script is blocked', async () => {
+      mockScriptBlocker.shouldBlockScript.mockResolvedValueOnce({ blocked: true, reason: 'Blocked' });
+      interceptGlobalMethods(mockScriptBlocker);
+      const result = await window.eval('console.log("test");');
+      expect(result).toBeUndefined();
+    });
+
+    it('should block Function when script is blocked', async () => {
+      mockScriptBlocker.shouldBlockScript.mockResolvedValueOnce({ blocked: true, reason: 'Blocked' });
+      interceptGlobalMethods(mockScriptBlocker);
+      const fn = await new Function('console.log("test");');
+      expect(fn()).toBeUndefined();
+    });
+
+    it('should block setTimeout when script is blocked', async () => {
+      mockScriptBlocker.shouldBlockScript.mockResolvedValueOnce({ blocked: true, reason: 'Blocked' });
+      interceptGlobalMethods(mockScriptBlocker);
+      const result = await window.setTimeout('console.log("test");', 0);
+      expect(result).toBe(0);
+    });
+
+    it('should block setInterval when script is blocked', async () => {
+      mockScriptBlocker.shouldBlockScript.mockResolvedValueOnce({ blocked: true, reason: 'Blocked' });
+      interceptGlobalMethods(mockScriptBlocker);
+      const result = await window.setInterval('console.log("test");', 0);
+      expect(result).toBe(0);
+    });
+
+    it('should throw error when XHR is blocked', async () => {
+      mockScriptBlocker.shouldBlockScript.mockResolvedValueOnce({ blocked: true, reason: 'Blocked' });
+      interceptGlobalMethods(mockScriptBlocker);
+      const xhr = new XMLHttpRequest();
+      await expect(xhr.open('GET', 'https://example.com/script.js')).rejects.toThrow('Blocked script: Blocked');
+    });
+
+    it('should throw error when fetch is blocked', async () => {
+      mockScriptBlocker.shouldBlockScript.mockResolvedValueOnce({ blocked: true, reason: 'Blocked' });
+      interceptGlobalMethods(mockScriptBlocker);
+      await expect(window.fetch('https://example.com/script.js')).rejects.toThrow('Blocked script: Blocked');
     });
   });
 }); 

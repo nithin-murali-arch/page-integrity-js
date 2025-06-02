@@ -42,13 +42,11 @@ describe('analyzeScript', () => {
     expect(result.threats).toContain('evasion');
     expect(result.threats).toContain('covertExecution');
     expect(result.score).toBeGreaterThanOrEqual(5);
-    expect(result.isMalicious).toBe(true);
   });
 
   it('returns safe for benign scripts', () => {
     const script = `console.log('hello world');`;
     const result = analyzeScript(script);
-    expect(result.isMalicious).toBe(false);
     expect(result.threats.length).toBe(0);
     expect(result.score).toBe(0);
   });
@@ -56,7 +54,6 @@ describe('analyzeScript', () => {
   it('returns safe for empty scripts', () => {
     const script = '';
     const result = analyzeScript(script);
-    expect(result.isMalicious).toBe(false);
     expect(result.threats.length).toBe(0);
     expect(result.score).toBe(0);
   });

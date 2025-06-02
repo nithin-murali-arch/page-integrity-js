@@ -1,5 +1,11 @@
 import { ScriptBlocker } from './script-blocker';
 
+interface BlockResult {
+  blocked: boolean;
+  reason?: string;
+  analysis?: any;
+}
+
 /**
  * Intercepts a script element and checks if it should be blocked.
  * @param script The script element to check
@@ -12,10 +18,17 @@ export async function interceptScriptElement(script: HTMLScriptElement, scriptBl
   }
 
   try {
+    let result;
     if (script.src) {
-      await scriptBlocker.shouldBlockScript(script.src, '');
+      result = await scriptBlocker.shouldBlockScript(script.src, '');
     } else if (script.textContent) {
-      await scriptBlocker.shouldBlockScript('inline', script.textContent);
+      result = await scriptBlocker.shouldBlockScript('inline', script.textContent);
+    }
+
+    if (result?.blocked) {
+      // Remove the script element
+      script.remove();
+      console.warn(`Blocked script: ${script.src || 'inline'} - ${result.reason}`);
     }
   } catch (error) {
     console.error('Error intercepting script:', error);
@@ -41,33 +54,80 @@ export function interceptGlobalMethods(scriptBlocker: ScriptBlocker): void {
   const originalFetch = window.fetch;
 
   window.eval = function(code: string): any {
-    scriptBlocker.shouldBlockScript('eval', code);
+    const result = scriptBlocker.shouldBlockScript('eval', code);
+    if (result instanceof Promise) {
+      return result.then((res: BlockResult) => {
+        if (res?.blocked) {
+          console.warn(`Blocked eval: ${res.reason}`);
+          return undefined;
+        }
+        return originalEval.call(window, code);
+      });
+    }
     return originalEval.call(window, code);
   };
 
   Function = function(...args: string[]): Function {
     const code = args[args.length - 1];
-    scriptBlocker.shouldBlockScript('Function', code);
+    const result = scriptBlocker.shouldBlockScript('Function', code);
+    if (result instanceof Promise) {
+      console.warn('Async script blocking not supported for Function constructor');
+      return function() { return undefined; };
+    }
+    const blockResult = result as BlockResult;
+    if (blockResult?.blocked) {
+      console.warn(`Blocked Function: ${blockResult.reason}`);
+      return function() { return undefined; };
+    }
     return originalFunction.apply(null, args);
   } as any;
 
   window.setTimeout = function(handler: TimerHandler, timeout?: number, ...args: any[]): ReturnType<typeof setTimeout> {
     if (typeof handler === 'string') {
-      scriptBlocker.shouldBlockScript('setTimeout', handler);
+      const result = scriptBlocker.shouldBlockScript('setTimeout', handler);
+      if (result instanceof Promise) {
+        const promise = result.then((res: BlockResult) => {
+          if (res?.blocked) {
+            console.warn(`Blocked setTimeout: ${res.reason}`);
+            return 0;
+          }
+          return originalSetTimeout.call(window, handler as unknown as (...args: any[]) => void, timeout, ...args as []);
+        });
+        return promise as unknown as ReturnType<typeof setTimeout>;
+      }
     }
-    return originalSetTimeout.call(window, handler as (...args: any[]) => void, timeout, ...args as []);
+    return originalSetTimeout.call(window, handler as unknown as (...args: any[]) => void, timeout, ...args as []);
   } as unknown as typeof setTimeout;
 
   window.setInterval = function(handler: TimerHandler, timeout?: number, ...args: any[]): ReturnType<typeof setInterval> {
     if (typeof handler === 'string') {
-      scriptBlocker.shouldBlockScript('setInterval', handler);
+      const result = scriptBlocker.shouldBlockScript('setInterval', handler);
+      if (result instanceof Promise) {
+        const promise = result.then((res: BlockResult) => {
+          if (res?.blocked) {
+            console.warn(`Blocked setInterval: ${res.reason}`);
+            return 0;
+          }
+          return originalSetInterval.call(window, handler as unknown as (...args: any[]) => void, timeout, ...args as []);
+        });
+        return promise as unknown as ReturnType<typeof setInterval>;
+      }
     }
-    return originalSetInterval.call(window, handler as (...args: any[]) => void, timeout, ...args as []);
+    return originalSetInterval.call(window, handler as unknown as (...args: any[]) => void, timeout, ...args as []);
   } as unknown as typeof setInterval;
 
-  XMLHttpRequest.prototype.open = function(method: string, url: string | URL, async: boolean = true, username: string | null = null, password: string | null = null): void {
+  XMLHttpRequest.prototype.open = async function(method: string, url: string | URL, async: boolean = true, username: string | null = null, password: string | null = null): Promise<void> {
     if (url.toString().endsWith('.js')) {
-      scriptBlocker.shouldBlockScript(url.toString(), '');
+      try {
+        const result = await scriptBlocker.shouldBlockScript(url.toString(), '');
+        if (result?.blocked) {
+          console.warn(`Blocked XHR: ${result.reason}`);
+          throw new Error(`Blocked script: ${result.reason}`);
+        }
+      } catch (error) {
+        console.error('Error in XHR open:', error);
+        throw error;
+      }
     }
     return originalXHROpen.call(this, method, url, async, username, password);
   };
@@ -79,7 +139,16 @@ export function interceptGlobalMethods(scriptBlocker: ScriptBlocker): void {
   window.fetch = async function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const url = input instanceof Request ? input.url : input.toString();
     if (url.endsWith('.js')) {
-      scriptBlocker.shouldBlockScript(url, '');
+      try {
+        const result = await scriptBlocker.shouldBlockScript(url, '');
+        if (result?.blocked) {
+          console.warn(`Blocked fetch: ${result.reason}`);
+          throw new Error(`Blocked script: ${result.reason}`);
+        }
+      } catch (error) {
+        console.error('Error in fetch:', error);
+        throw error;
+      }
     }
     return originalFetch.call(window, input, init);
   };

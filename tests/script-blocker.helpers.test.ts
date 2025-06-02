@@ -1,101 +1,89 @@
 import { checkCachedResponse, analyzeAndBlockScript } from '../src/utils/script-blocker';
 import { CacheManager } from '../src/utils/cache-manager';
-import { analyzeScript } from '../src/utils/script-analyzer';
+import { ScriptBlocker } from '../src/utils/script-blocker';
+import { PageIntegrityConfig } from '../src/types';
 
-jest.mock('../src/utils/cache-manager');
-jest.mock('../src/utils/script-analyzer');
+describe('Script Blocker Helpers', () => {
+  let mockCacheManager: CacheManager;
+  let mockConfig: PageIntegrityConfig;
 
-describe('script-blocker helpers', () => {
+  beforeEach(() => {
+    mockCacheManager = {
+      getCachedResponse: jest.fn(),
+      setCachedResponse: jest.fn(),
+      clearCache: jest.fn()
+    } as unknown as CacheManager;
+
+    mockConfig = {
+      analysisConfig: {
+        minScore: 3,
+        maxThreats: 2,
+        checkSuspiciousStrings: true
+      }
+    } as PageIntegrityConfig;
+  });
+
   describe('checkCachedResponse', () => {
-    it('returns blocked result if cached analysis is malicious', async () => {
+    it('should return blocked if script is cached and blocked', async () => {
+      const url = 'https://example.com/script.js';
+      const content = 'console.log("test")';
       const hash = 'test-hash';
-      const mockCacheManager = {
-        getCachedResponse: jest.fn().mockResolvedValue({
-          url: 'https://example.com/cached.js',
-          analysis: { isMalicious: true }
-        })
-      } as unknown as CacheManager;
-      const result = await checkCachedResponse(hash, mockCacheManager);
-      expect(result).toEqual({
+      (mockCacheManager.getCachedResponse as jest.Mock).mockResolvedValue({
         blocked: true,
-        reason: 'Malicious script detected',
-        analysis: { isMalicious: true }
+        reason: 'test',
+        analysis: { score: 5 }
       });
+
+      const result = await checkCachedResponse(mockCacheManager, url, content);
+      expect(result.blocked).toBe(true);
+      expect(result.reason).toBe('test');
+      expect(result.analysis).toBeDefined();
     });
 
-    it('returns non-blocked result if cached analysis is not malicious', async () => {
+    it('should return not blocked if script is cached but not blocked', async () => {
+      const url = 'https://example.com/script.js';
+      const content = 'console.log("test")';
       const hash = 'test-hash';
-      const mockCacheManager = {
-        getCachedResponse: jest.fn().mockResolvedValue({
-          url: 'https://example.com/cached.js',
-          analysis: { isMalicious: false }
-        })
-      } as unknown as CacheManager;
-      const result = await checkCachedResponse(hash, mockCacheManager);
-      expect(result).toEqual({
+      (mockCacheManager.getCachedResponse as jest.Mock).mockResolvedValue({
         blocked: false,
-        analysis: { isMalicious: false }
+        analysis: { score: 1 }
       });
+
+      const result = await checkCachedResponse(mockCacheManager, url, content);
+      expect(result.blocked).toBe(false);
+      expect(result.analysis).toBeDefined();
     });
 
-    it('returns null if no cached response is found', async () => {
+    it('should return not blocked if script is not cached', async () => {
+      const url = 'https://example.com/script.js';
+      const content = 'console.log("test")';
       const hash = 'test-hash';
-      const mockCacheManager = {
-        getCachedResponse: jest.fn().mockResolvedValue(null)
-      } as unknown as CacheManager;
-      const result = await checkCachedResponse(hash, mockCacheManager);
-      expect(result).toBeNull();
+      (mockCacheManager.getCachedResponse as jest.Mock).mockResolvedValue(null);
+
+      const result = await checkCachedResponse(mockCacheManager, url, content);
+      expect(result.blocked).toBe(false);
     });
   });
 
   describe('analyzeAndBlockScript', () => {
-    it('blocks script if analysis is malicious', async () => {
-      const content = 'eval("alert(1)");';
-      const url = 'https://example.com/malicious.js';
-      const mockCacheManager = {} as unknown as CacheManager;
-      const blockedScripts = new Map();
-      (analyzeScript as jest.Mock).mockReturnValue({
-        isMalicious: true,
-        threats: ['covertExecution'],
-        score: 3,
-        details: [{ pattern: 'eval', matches: ['eval("alert(1)")'] }]
-      });
-      const result = await analyzeAndBlockScript(content, url, mockCacheManager, blockedScripts);
-      expect(result).toEqual({
-        blocked: true,
-        reason: 'Malicious script detected',
-        analysis: {
-          isMalicious: true,
-          threats: ['covertExecution'],
-          score: 3,
-          details: [{ pattern: 'eval', matches: ['eval("alert(1)")'] }]
-        }
-      });
-      expect(blockedScripts.get(url)).toBeDefined();
+    it('should analyze and block script if malicious', async () => {
+      const url = 'https://example.com/script.js';
+      const content = 'eval("malicious code")';
+      const scriptBlocker = new ScriptBlocker(mockCacheManager, mockConfig);
+
+      const result = await analyzeAndBlockScript(scriptBlocker, url, content);
+      expect(result.blocked).toBe(true);
+      expect(result.analysis).toBeDefined();
     });
 
-    it('does not block script if analysis is not malicious', async () => {
-      const content = 'console.log("hello world");';
-      const url = 'https://example.com/safe.js';
-      const mockCacheManager = {} as unknown as CacheManager;
-      const blockedScripts = new Map();
-      (analyzeScript as jest.Mock).mockReturnValue({
-        isMalicious: false,
-        threats: [],
-        score: 0,
-        details: []
-      });
-      const result = await analyzeAndBlockScript(content, url, mockCacheManager, blockedScripts);
-      expect(result).toEqual({
-        blocked: false,
-        analysis: {
-          isMalicious: false,
-          threats: [],
-          score: 0,
-          details: []
-        }
-      });
-      expect(blockedScripts.get(url)).toBeUndefined();
+    it('should analyze and not block script if not malicious', async () => {
+      const url = 'https://example.com/script.js';
+      const content = 'console.log("safe code")';
+      const scriptBlocker = new ScriptBlocker(mockCacheManager, mockConfig);
+
+      const result = await analyzeAndBlockScript(scriptBlocker, url, content);
+      expect(result.blocked).toBe(false);
+      expect(result.analysis).toBeDefined();
     });
   });
 }); 

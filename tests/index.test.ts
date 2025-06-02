@@ -4,8 +4,27 @@ import { CacheManager } from '../src/utils/cache-manager';
 import { PageIntegrityConfig } from '../src/types';
 import { DEFAULT_ANALYSIS_CONFIG } from '../src/utils/script-analyzer';
 
-jest.mock('../src/script-blocking');
-jest.mock('../src/utils/cache-manager');
+// Mock the script interceptor and script blocker
+jest.mock('../src/utils/script-interceptor', () => ({
+  ScriptInterceptor: jest.fn().mockImplementation(() => ({
+    start: jest.fn(),
+    stop: jest.fn()
+  }))
+}));
+
+jest.mock('../src/script-blocking', () => ({
+  ScriptBlocker: jest.fn().mockImplementation(() => ({
+    shouldBlockScript: jest.fn().mockResolvedValue({ blocked: false })
+  }))
+}));
+
+jest.mock('../src/utils/cache-manager', () => ({
+  CacheManager: jest.fn().mockImplementation(() => ({
+    getCachedResponse: jest.fn(),
+    clearCache: jest.fn(),
+    cacheResponse: jest.fn()
+  }))
+}));
 
 describe('PageIntegrity', () => {
   let mockScriptBlocker: jest.Mocked<ScriptBlocker>;

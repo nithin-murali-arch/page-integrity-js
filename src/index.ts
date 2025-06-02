@@ -9,6 +9,7 @@
 import { PageIntegrityConfig, BlockedEventInfo } from './types';
 import { ScriptBlocker } from './script-blocking';
 import { CacheManager } from './utils/cache-manager';
+import { analyzeScript, AnalysisConfig, DEFAULT_ANALYSIS_CONFIG } from './utils/script-analyzer';
 
 // Types
 export type MutationType = 'insert' | 'update' | 'remove';
@@ -66,11 +67,31 @@ export interface AllowedMutations {
 }
 
 export function mergeConfig(defaults: PageIntegrityConfig, config: PageIntegrityConfig): PageIntegrityConfig {
-  return { ...defaults, ...config };
+  const mergedConfig = { ...defaults, ...config };
+  
+  // Deep merge analysis config if provided
+  if (config.analysisConfig) {
+    mergedConfig.analysisConfig = {
+      ...DEFAULT_ANALYSIS_CONFIG,
+      ...config.analysisConfig,
+      weights: {
+        ...DEFAULT_ANALYSIS_CONFIG.weights,
+        ...config.analysisConfig.weights
+      },
+      scoringRules: {
+        ...DEFAULT_ANALYSIS_CONFIG.scoringRules,
+        ...config.analysisConfig.scoringRules
+      }
+    };
+  } else {
+    mergedConfig.analysisConfig = DEFAULT_ANALYSIS_CONFIG;
+  }
+
+  return mergedConfig;
 }
 
 export function initScriptBlocker(config: PageIntegrityConfig, cacheManager: CacheManager): ScriptBlocker {
-  return new ScriptBlocker(cacheManager);
+  return new ScriptBlocker(cacheManager, config);
 }
 
 export function exposeGlobally(cls: any, name: string): void {
@@ -112,8 +133,59 @@ export class PageIntegrity {
    * @param newConfig Partial configuration to merge with the current config.
    */
   public updateConfig(newConfig: Partial<PageIntegrityConfig>): void {
-    this.config = { ...this.config, ...newConfig };
+    this.config = mergeConfig(this.config, newConfig);
     this.scriptBlocker = initScriptBlocker(this.config, this.cacheManager);
+  }
+
+  private handleScript(script: HTMLScriptElement, scriptInfo: ScriptInfo): boolean {
+    // Check if script is blacklisted
+    const isBlacklisted = this.config.blacklistedHosts?.some(host => {
+      const scriptUrl = script.src || '';
+      return scriptUrl.includes(host);
+    });
+
+    if (isBlacklisted) {
+      if (this.config.onBlocked) {
+        this.config.onBlocked({
+          type: 'blacklisted',
+          target: script,
+          stackTrace: new Error().stack || '',
+          context: {
+            source: scriptInfo.source,
+            origin: scriptInfo.origin
+          }
+        });
+      }
+      return false;
+    }
+
+    // Perform analysis for monitoring purposes
+    const content = script.textContent || '';
+    const analysis = analyzeScript(content, this.config.analysisConfig);
+    
+    // Report analysis results if score is below threshold
+    if (analysis.score < (this.config.analysisConfig?.minScore || DEFAULT_ANALYSIS_CONFIG.minScore)) {
+      if (this.config.onBlocked) {
+        this.config.onBlocked({
+          type: 'low-score',
+          target: script,
+          stackTrace: new Error().stack || '',
+          context: {
+            source: scriptInfo.source,
+            origin: scriptInfo.origin,
+            score: analysis.score,
+            analysisDetails: {
+              staticScore: analysis.score,
+              dynamicScore: 0,
+              originScore: 0,
+              hashScore: 0
+            }
+          }
+        });
+      }
+    }
+
+    return true;
   }
 }
 

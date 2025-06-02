@@ -6,6 +6,7 @@ const MAX_CACHE_SIZE = 2500;
 export interface CacheEntry {
   url: string;
   analysis?: ScriptAnalysis;
+  reason?: string;
 }
 
 export class CacheManager {

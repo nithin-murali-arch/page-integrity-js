@@ -61,17 +61,59 @@ const MALICIOUS_PATTERNS = {
   ]
 };
 
+export interface AnalysisConfig {
+  minScore: number;
+  maxThreats: number;
+  checkSuspiciousStrings: boolean;
+  weights: {
+    evasion: number;
+    covertExecution: number;
+    securityBypass: number;
+    maliciousIntent: number;
+  };
+  scoringRules: {
+    minSafeScore: number;
+    maxThreats: number;
+    suspiciousStringWeight: number;
+  };
+}
+
+export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
+  minScore: 3,
+  maxThreats: 2,
+  checkSuspiciousStrings: true,
+  weights: {
+    evasion: 3,
+    covertExecution: 3,
+    securityBypass: 2,
+    maliciousIntent: 2
+  },
+  scoringRules: {
+    minSafeScore: 3,
+    maxThreats: 2,
+    suspiciousStringWeight: 1
+  }
+};
+
 export interface ScriptAnalysis {
-  isMalicious: boolean;
   threats: string[];
   score: number;
   details: {
     pattern: string;
     matches: string[];
   }[];
+  analysisDetails?: {
+    suspiciousStrings?: string[];
+    categories?: string[];
+    staticScore?: number;
+    dynamicScore?: number;
+    originScore?: number;
+    hashScore?: number;
+  };
+  isMalicious?: boolean;
 }
 
-export function analyzeScript(content: string): ScriptAnalysis {
+export function analyzeScript(content: string, config: AnalysisConfig = DEFAULT_ANALYSIS_CONFIG): ScriptAnalysis {
   const threats: string[] = [];
   const details: { pattern: string; matches: string[] }[] = [];
   let score = 0;
@@ -112,17 +154,20 @@ export function analyzeScript(content: string): ScriptAnalysis {
   }
 
   // Check for suspicious string patterns
-  const suspiciousStrings = detectSuspiciousStrings(content);
+  const suspiciousStrings = config.checkSuspiciousStrings ? detectSuspiciousStrings(content) : [];
   if (suspiciousStrings.length > 0) {
     threats.push('suspicious-strings');
     score += suspiciousStrings.length;
   }
 
   return {
-    isMalicious: score >= 5, // Higher threshold for malicious detection
     threats,
     score,
-    details
+    details,
+    analysisDetails: {
+      suspiciousStrings,
+      categories: [...new Set(threats)]
+    }
   };
 }
 

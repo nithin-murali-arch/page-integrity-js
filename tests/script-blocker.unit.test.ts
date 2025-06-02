@@ -1,6 +1,7 @@
 import { ScriptBlocker } from '../src/utils/script-blocker';
 import { CacheManager } from '../src/utils/cache-manager';
 import { analyzeScript } from '../src/utils/script-analyzer';
+import { PageIntegrityConfig } from '../src/types';
 
 jest.mock('../src/utils/cache-manager');
 jest.mock('../src/utils/script-analyzer');
@@ -8,6 +9,7 @@ jest.mock('../src/utils/script-analyzer');
 describe('ScriptBlocker', () => {
   let scriptBlocker: ScriptBlocker;
   let mockCacheManager: jest.Mocked<CacheManager>;
+  let mockConfig: PageIntegrityConfig;
 
   beforeEach(() => {
     mockCacheManager = {
@@ -16,28 +18,23 @@ describe('ScriptBlocker', () => {
       cacheResponse: jest.fn(),
     } as unknown as jest.Mocked<CacheManager>;
 
-    scriptBlocker = ScriptBlocker.createInstance(mockCacheManager);
+    mockConfig = {
+      blacklistedHosts: ['malicious.com'],
+      whitelistedHosts: ['trusted.com']
+    };
+
+    scriptBlocker = new ScriptBlocker(mockCacheManager, mockConfig);
   });
 
-  it('should block malicious scripts', async () => {
-    const maliciousContent = 'eval("alert(1)");';
-    mockCacheManager.getCachedResponse.mockResolvedValue(null);
-    (analyzeScript as jest.Mock).mockReturnValue({
-      isMalicious: true,
-      threats: ['covertExecution'],
-      score: 3,
-      details: [{ pattern: 'eval', matches: ['eval("alert(1)")'] }]
-    });
-    const result = await scriptBlocker.shouldBlockScript('https://example.com/malicious.js', maliciousContent);
+  it('should block blacklisted scripts', async () => {
+    const result = await scriptBlocker.shouldBlockScript('https://malicious.com/script.js', 'any content');
     expect(result.blocked).toBe(true);
-    expect(result.reason).toBe('Malicious script detected');
+    expect(result.reason).toBe('Blacklisted script');
   });
 
-  it('should not block safe scripts', async () => {
+  it('should not block non-blacklisted scripts', async () => {
     const safeContent = 'console.log("hello world");';
-    mockCacheManager.getCachedResponse.mockResolvedValue(null);
     (analyzeScript as jest.Mock).mockReturnValue({
-      isMalicious: false,
       threats: [],
       score: 0,
       details: []
@@ -46,43 +43,29 @@ describe('ScriptBlocker', () => {
     expect(result.blocked).toBe(false);
   });
 
-  it('should use cached response if available', async () => {
-    const cachedAnalysis = {
-      isMalicious: true,
-      threats: ['covertExecution'],
-      score: 3,
-      details: [{ pattern: 'eval', matches: ['eval("alert(1)")'] }]
+  it('should analyze and track all scripts', async () => {
+    const content = 'console.log("hello world");';
+    const analysis = {
+      threats: [],
+      score: 0,
+      details: []
     };
-    mockCacheManager.getCachedResponse.mockResolvedValue({ url: 'https://example.com/cached.js', analysis: cachedAnalysis });
-    const result = await scriptBlocker.shouldBlockScript('https://example.com/cached.js', 'any content');
-    expect(result.blocked).toBe(true);
-    expect(result.analysis).toBe(cachedAnalysis);
+    (analyzeScript as jest.Mock).mockReturnValue(analysis);
+    
+    const result = await scriptBlocker.shouldBlockScript('https://example.com/script.js', content);
+    expect(result.blocked).toBe(false);
+    expect(result.analysis).toBe(analysis);
+    expect(scriptBlocker.isScriptBlocked('https://example.com/script.js')).toBe(true);
   });
 
   it('should track blocked scripts', async () => {
-    const maliciousContent = 'eval("alert(1)");';
-    mockCacheManager.getCachedResponse.mockResolvedValue(null);
-    (analyzeScript as jest.Mock).mockReturnValue({
-      isMalicious: true,
-      threats: ['covertExecution'],
-      score: 3,
-      details: [{ pattern: 'eval', matches: ['eval("alert(1)")'] }]
-    });
-    await scriptBlocker.shouldBlockScript('https://example.com/malicious.js', maliciousContent);
-    expect(scriptBlocker.isScriptBlocked('https://example.com/malicious.js')).toBe(true);
+    await scriptBlocker.shouldBlockScript('https://malicious.com/script.js', 'any content');
+    expect(scriptBlocker.isScriptBlocked('https://malicious.com/script.js')).toBe(true);
     expect(scriptBlocker.getBlockedScriptsCount()).toBe(1);
   });
 
   it('should clear blocked scripts', async () => {
-    const maliciousContent = 'eval("alert(1)");';
-    mockCacheManager.getCachedResponse.mockResolvedValue(null);
-    (analyzeScript as jest.Mock).mockReturnValue({
-      isMalicious: true,
-      threats: ['covertExecution'],
-      score: 3,
-      details: [{ pattern: 'eval', matches: ['eval("alert(1)")'] }]
-    });
-    await scriptBlocker.shouldBlockScript('https://example.com/malicious.js', maliciousContent);
+    await scriptBlocker.shouldBlockScript('https://malicious.com/script.js', 'any content');
     scriptBlocker.clearBlockedScripts();
     expect(scriptBlocker.getBlockedScriptsCount()).toBe(0);
   });
