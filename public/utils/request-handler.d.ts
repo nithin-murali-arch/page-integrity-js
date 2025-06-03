@@ -13,8 +13,10 @@ export declare function cacheNonScript(text: string, url: string, cacheManager: 
 }>;
 export declare class RequestHandler {
     private cacheManager;
+    private static handledRequests;
     constructor(cacheManager: CacheManager);
     static createInstance(cacheManager: CacheManager): RequestHandler;
+    private cleanupRequest;
     handleFetch(request: Request): Promise<Response>;
     handleXhrRequest(url: string, method: string, body?: string): Promise<{
         hash: string;

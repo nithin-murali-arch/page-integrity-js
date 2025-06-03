@@ -201,14 +201,6 @@
         return suspicious;
     }
 
-    function fetchAndClone(request) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const response = yield fetch(request);
-            const clonedResponse = response.clone();
-            const text = yield clonedResponse.text();
-            return { response, text };
-        });
-    }
     function shouldAnalyzeScript(request, response) {
         var _a;
         const url = request.url.toLowerCase();
@@ -238,39 +230,78 @@
         static createInstance(cacheManager) {
             return new RequestHandler(cacheManager);
         }
+        cleanupRequest(request) {
+            RequestHandler.handledRequests.delete(request);
+        }
         handleFetch(request) {
             return __awaiter(this, void 0, void 0, function* () {
-                const { response, text } = yield fetchAndClone(request);
-                const url = request.url;
+                // Skip if this request is already being handled by the service worker
+                if (RequestHandler.handledRequests.get(request)) {
+                    try {
+                        return yield fetch(request);
+                    }
+                    catch (error) {
+                        console.error(`Failed to load resource: ${request.url}`, error);
+                        throw error;
+                    }
+                }
+                // Mark this request as being handled
+                RequestHandler.handledRequests.set(request, true);
                 try {
-                    if (shouldAnalyzeScript(request, response)) {
-                        yield analyzeAndCacheScript(text, url, this.cacheManager);
+                    const response = yield fetch(request);
+                    const clonedResponse = response.clone();
+                    const text = yield clonedResponse.text();
+                    const url = request.url;
+                    try {
+                        if (shouldAnalyzeScript(request, response)) {
+                            yield analyzeAndCacheScript(text, url, this.cacheManager);
+                        }
+                        else {
+                            yield cacheNonScript(text, url, this.cacheManager);
+                        }
                     }
-                    else {
-                        yield cacheNonScript(text, url, this.cacheManager);
+                    catch (error) {
+                        console.error(`Error processing response for ${url}:`, error);
                     }
+                    return response;
                 }
                 catch (error) {
-                    console.error('Error processing response:', error);
+                    console.error(`Failed to load resource: ${request.url}`, error);
+                    throw error;
                 }
-                return response;
+                finally {
+                    this.cleanupRequest(request);
+                }
             });
         }
         handleXhrRequest(url, method, body) {
             return __awaiter(this, void 0, void 0, function* () {
-                const response = yield fetch(url, { method, body });
-                const text = yield response.text();
-                return analyzeAndCacheScript(text, url, this.cacheManager);
+                try {
+                    const response = yield fetch(url, { method, body });
+                    const text = yield response.text();
+                    return analyzeAndCacheScript(text, url, this.cacheManager);
+                }
+                catch (error) {
+                    console.error(`Failed to load XHR resource: ${url}`, error);
+                    throw error;
+                }
             });
         }
         handleScriptRequest(url) {
             return __awaiter(this, void 0, void 0, function* () {
-                const response = yield fetch(url);
-                const text = yield response.text();
-                return analyzeAndCacheScript(text, url, this.cacheManager);
+                try {
+                    const response = yield fetch(url);
+                    const text = yield response.text();
+                    return analyzeAndCacheScript(text, url, this.cacheManager);
+                }
+                catch (error) {
+                    console.error(`Failed to load script resource: ${url}`, error);
+                    throw error;
+                }
             });
         }
     }
+    RequestHandler.handledRequests = new WeakMap();
 
     const CACHE_NAME = 'response-cache';
     const MAX_CACHE_SIZE = 2500;
