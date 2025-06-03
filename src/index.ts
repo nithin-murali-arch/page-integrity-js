@@ -189,4 +189,4 @@ export class PageIntegrity {
   }
 }
 
-export * from './types'; 
+export * from './types';

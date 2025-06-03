@@ -1,10 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2015",
-    "module": "ES2015",
+    "module": "ESNext",
     "lib": ["ES2015", "WebWorker"],
     "declaration": true,
-    "outDir": "./dist",
+    "outDir": "./public",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -12,9 +12,6 @@
     "moduleResolution": "node",
     "sourceMap": true
   },
-  "include": [
-    "src/service-worker.ts",
-    "src/utils/hash.ts"
-  ],
+  "include": ["src/service-worker.ts", "src/utils/hash.ts"],
   "exclude": ["node_modules", "dist"]
-} 
+}
