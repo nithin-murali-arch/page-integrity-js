@@ -184,6 +184,16 @@ describe('PageIntegrity', () => {
       expect(pi['config'].strictMode).toBe(true);
     });
 
+    it('should use default analysis config when not provided', () => {
+      const configWithoutAnalysis: PageIntegrityConfig = {
+        strictMode: false,
+        whiteListedScripts: [],
+        blackListedScripts: []
+      };
+      const pi = new PageIntegrity(configWithoutAnalysis);
+      expect(pi['config'].analysisConfig).toEqual(DEFAULT_ANALYSIS_CONFIG);
+    });
+
     it('should handle analysis configuration', () => {
       const analysisConfig: PageIntegrityConfig = {
         ...config,

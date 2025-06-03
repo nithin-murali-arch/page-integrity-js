@@ -65,7 +65,7 @@ const MALICIOUS_PATTERNS: Record<ThreatCategory, RegExp[]> = {
 
 export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
   minScore: 3,
-  maxThreats: 2,
+  maxThreats: Infinity,
   checkSuspiciousStrings: true,
   weights: {
     evasion: 3,
@@ -75,7 +75,7 @@ export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
   },
   scoringRules: {
     minSafeScore: 3,
-    maxThreats: 2,
+    maxThreats: Infinity,
     suspiciousStringWeight: 1
   }
 };

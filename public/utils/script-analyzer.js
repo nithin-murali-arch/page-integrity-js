@@ -59,7 +59,7 @@ const MALICIOUS_PATTERNS = {
 };
 export const DEFAULT_ANALYSIS_CONFIG = {
     minScore: 3,
-    maxThreats: 2,
+    maxThreats: Infinity,
     checkSuspiciousStrings: true,
     weights: {
         evasion: 3,
@@ -69,7 +69,7 @@ export const DEFAULT_ANALYSIS_CONFIG = {
     },
     scoringRules: {
         minSafeScore: 3,
-        maxThreats: 2,
+        maxThreats: Infinity,
         suspiciousStringWeight: 1
     }
 };

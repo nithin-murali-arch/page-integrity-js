@@ -125,8 +125,27 @@ export interface PageIntegrityConfig {
   whiteListedScripts: string[];
   /** List of blocked script URLs or partial URLs that are not allowed to execute */
   blackListedScripts: string[];
-  /** Configuration for script analysis */
-  analysisConfig: AnalysisConfig;
+  /** Configuration for script analysis. Defaults to:
+   * ```ts
+   * {
+   *   minScore: 3,
+   *   maxThreats: 2,
+   *   checkSuspiciousStrings: true,
+   *   weights: {
+   *     evasion: 3,
+   *     covertExecution: 3,
+   *     securityBypass: 2,
+   *     maliciousIntent: 2
+   *   },
+   *   scoringRules: {
+   *     minSafeScore: 3,
+   *     maxThreats: 2,
+   *     suspiciousStringWeight: 1
+   *   }
+   * }
+   * ```
+   */
+  analysisConfig?: AnalysisConfig;
   /** Callback function that is called when a script is blocked */
   onBlocked?: (info: BlockedEventInfo) => void;
 }

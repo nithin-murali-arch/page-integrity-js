@@ -105,7 +105,7 @@
     };
     const DEFAULT_ANALYSIS_CONFIG = {
         minScore: 3,
-        maxThreats: 2,
+        maxThreats: Infinity,
         checkSuspiciousStrings: true,
         weights: {
             evasion: 3,
@@ -115,7 +115,7 @@
         },
         scoringRules: {
             minSafeScore: 3,
-            maxThreats: 2,
+            maxThreats: Infinity,
             suspiciousStringWeight: 1
         }
     };

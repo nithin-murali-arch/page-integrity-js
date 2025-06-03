@@ -1,4 +1,4 @@
-import { analyzeScript as analyzeScriptContent } from './script-analyzer';
+import { analyzeScript as analyzeScriptContent, DEFAULT_ANALYSIS_CONFIG } from './script-analyzer';
 import { createHash } from './hash';
 import { CacheManager } from './cache-manager';
 import { PageIntegrityConfig } from '../types';
@@ -23,10 +23,7 @@ export async function checkCachedResponse(cacheManager: CacheManager, url: strin
 
 export async function analyzeAndBlockScript(scriptBlocker: ScriptBlocker, url: string, content: string): Promise<{ blocked: boolean; reason?: string; analysis?: any }> {
   const analysis = analyzeScriptContent(content);
-  const config = scriptBlocker['config']?.analysisConfig;
-  if (!config) {
-    return { blocked: false, analysis };
-  }
+  const config = scriptBlocker['config']?.analysisConfig ?? DEFAULT_ANALYSIS_CONFIG;
   if (analysis.score >= config.minScore || analysis.threats.length >= config.maxThreats) {
     return { blocked: true, reason: 'Malicious script detected', analysis };
   }
@@ -41,7 +38,10 @@ export class ScriptBlocker {
   public constructor(cacheManager: CacheManager, config: PageIntegrityConfig) {
     this.cacheManager = cacheManager;
     this.blockedScripts = new Map();
-    this.config = config;
+    this.config = {
+      ...config,
+      analysisConfig: config.analysisConfig ?? DEFAULT_ANALYSIS_CONFIG
+    };
   }
 
   public async shouldBlockScript(url: string, content: string): Promise<{ blocked: boolean; reason?: string; analysis?: any }> {
@@ -93,9 +93,9 @@ export class ScriptBlocker {
     }
 
     // Analyze script for monitoring
-    const analysis = analyzeScriptContent(content);
-    const config = this.config.analysisConfig;
-    if (analysis.score >= config.minScore || analysis.threats.length >= config.maxThreats) {
+    const analysis = analyzeScriptContent(content, this.config.analysisConfig);
+    const { minScore, maxThreats } = this.config.analysisConfig ?? DEFAULT_ANALYSIS_CONFIG;
+    if (analysis.score >= minScore || analysis.threats.length >= maxThreats) {
       const blockedInfo = {
         url,
         reason: 'Malicious script detected',
