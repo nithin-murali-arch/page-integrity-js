@@ -1,4 +1,4 @@
-import { analyzeScript, ScriptAnalysis } from '../src/utils/script-analyzer';
+import { analyzeScript } from '../src/utils/script-analyzer';
 
 describe('analyzeScript', () => {
   it('detects evasion patterns', () => {
@@ -30,10 +30,10 @@ describe('analyzeScript', () => {
   });
 
   it('detects suspicious string patterns', () => {
-    const script = `bypass security`;
+    const script = `document.domain = "*"; Object.defineProperty(window, "cookie");`;
     const result = analyzeScript(script);
-    expect(result.threats).toContain('suspicious-strings');
-    expect(result.score).toBeGreaterThanOrEqual(1);
+    expect(result.threats).toContain('securityBypass');
+    expect(result.score).toBeGreaterThanOrEqual(2);
   });
 
   it('detects multiple threat categories and increases score', () => {

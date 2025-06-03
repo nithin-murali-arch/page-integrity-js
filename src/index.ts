@@ -6,34 +6,19 @@
  * @packageDocumentation
  */
 
-import { PageIntegrityConfig, BlockedEventInfo } from './types';
-import { ScriptBlocker } from './script-blocking';
 import { CacheManager } from './utils/cache-manager';
-import { analyzeScript, AnalysisConfig, DEFAULT_ANALYSIS_CONFIG } from './utils/script-analyzer';
-
-// Types
-export type MutationType = 'insert' | 'update' | 'remove';
-export type ElementType = 'div' | 'span' | 'p' | 'a' | 'img' | 'button';
-export type ScriptSource = 'inline' | 'external' | 'extension' | 'unknown';
-
-export interface ScriptInfo {
-  /** Unique hash identifier for the script */
-  hash: string;
-  /** Origin of the script */
-  origin: string;
-  /** Script type (e.g., 'text/javascript') */
-  type: string;
-  /** Order in which the script was loaded */
-  loadOrder: number;
-  /** List of script dependencies */
-  dependencies: string[];
-  /** Source of the script execution */
-  source: ScriptSource;
-  /** Whether the script is from a Chrome extension */
-  isExtension: boolean;
-  /** Whether the script is first-party (part of the original HTML) */
-  isFirstParty: boolean;
-}
+import { ScriptBlocker } from './utils/script-blocker';
+import { ScriptInterceptor } from './utils/script-interceptor';
+import { 
+  PageIntegrityConfig, 
+  ScriptInfo, 
+  BlockedEventInfo,
+  MutationType,
+  ElementType,
+  ScriptSource
+} from './types/index';
+import { DEFAULT_ANALYSIS_CONFIG } from './utils/script-analyzer';
+import { startScriptBlocking, stopScriptBlocking } from './script-blocking';
 
 export interface MutationContext {
   /** Parent element of the mutated element */
@@ -116,6 +101,7 @@ export class PageIntegrity {
   private config: PageIntegrityConfig;
   private scriptBlocker: ScriptBlocker;
   private cacheManager: CacheManager;
+  private scriptInterceptor: ScriptInterceptor;
 
   /**
    * Create a new PageIntegrity instance.
@@ -125,6 +111,11 @@ export class PageIntegrity {
     this.config = mergeConfig({ allowDynamicInline: true }, config);
     this.cacheManager = new CacheManager();
     this.scriptBlocker = initScriptBlocker(this.config, this.cacheManager);
+    this.scriptInterceptor = new ScriptInterceptor(this.scriptBlocker);
+    startScriptBlocking({
+      scriptInterceptor: this.scriptInterceptor,
+      scriptBlocker: this.scriptBlocker
+    });
     exposeGlobally(PageIntegrity, 'PageIntegrity');
   }
 
@@ -135,57 +126,21 @@ export class PageIntegrity {
   public updateConfig(newConfig: Partial<PageIntegrityConfig>): void {
     this.config = mergeConfig(this.config, newConfig);
     this.scriptBlocker = initScriptBlocker(this.config, this.cacheManager);
+    this.scriptInterceptor = new ScriptInterceptor(this.scriptBlocker);
+    startScriptBlocking({
+      scriptInterceptor: this.scriptInterceptor,
+      scriptBlocker: this.scriptBlocker
+    });
   }
 
-  private handleScript(script: HTMLScriptElement, scriptInfo: ScriptInfo): boolean {
-    // Check if script is blacklisted
-    const isBlacklisted = this.config.blacklistedHosts?.some(host => {
-      const scriptUrl = script.src || '';
-      return scriptUrl.includes(host);
+  /**
+   * Stop script blocking and cleanup resources.
+   */
+  public destroy(): void {
+    stopScriptBlocking({
+      scriptInterceptor: this.scriptInterceptor,
+      scriptBlocker: this.scriptBlocker
     });
-
-    if (isBlacklisted) {
-      if (this.config.onBlocked) {
-        this.config.onBlocked({
-          type: 'blacklisted',
-          target: script,
-          stackTrace: new Error().stack || '',
-          context: {
-            source: scriptInfo.source,
-            origin: scriptInfo.origin
-          }
-        });
-      }
-      return false;
-    }
-
-    // Perform analysis for monitoring purposes
-    const content = script.textContent || '';
-    const analysis = analyzeScript(content, this.config.analysisConfig);
-    
-    // Report analysis results if score is below threshold
-    if (analysis.score < (this.config.analysisConfig?.minScore || DEFAULT_ANALYSIS_CONFIG.minScore)) {
-      if (this.config.onBlocked) {
-        this.config.onBlocked({
-          type: 'low-score',
-          target: script,
-          stackTrace: new Error().stack || '',
-          context: {
-            source: scriptInfo.source,
-            origin: scriptInfo.origin,
-            score: analysis.score,
-            analysisDetails: {
-              staticScore: analysis.score,
-              dynamicScore: 0,
-              originScore: 0,
-              hashScore: 0
-            }
-          }
-        });
-      }
-    }
-
-    return true;
   }
 }
 

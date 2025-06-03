@@ -1,5 +1,7 @@
+import { AnalysisConfig, ScriptAnalysis, ThreatCategory } from '../types/index';
+
 // Malicious behavior patterns to check for
-const MALICIOUS_PATTERNS = {
+const MALICIOUS_PATTERNS: Record<ThreatCategory, RegExp[]> = {
   // Evasion techniques
   evasion: [
     // Attempting to bypass CSP
@@ -61,23 +63,6 @@ const MALICIOUS_PATTERNS = {
   ]
 };
 
-export interface AnalysisConfig {
-  minScore: number;
-  maxThreats: number;
-  checkSuspiciousStrings: boolean;
-  weights: {
-    evasion: number;
-    covertExecution: number;
-    securityBypass: number;
-    maliciousIntent: number;
-  };
-  scoringRules: {
-    minSafeScore: number;
-    maxThreats: number;
-    suspiciousStringWeight: number;
-  };
-}
-
 export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
   minScore: 3,
   maxThreats: 2,
@@ -95,24 +80,6 @@ export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
   }
 };
 
-export interface ScriptAnalysis {
-  threats: string[];
-  score: number;
-  details: {
-    pattern: string;
-    matches: string[];
-  }[];
-  analysisDetails?: {
-    suspiciousStrings?: string[];
-    categories?: string[];
-    staticScore?: number;
-    dynamicScore?: number;
-    originScore?: number;
-    hashScore?: number;
-  };
-  isMalicious?: boolean;
-}
-
 export function analyzeScript(content: string, config: AnalysisConfig = DEFAULT_ANALYSIS_CONFIG): ScriptAnalysis {
   const threats: string[] = [];
   const details: { pattern: string; matches: string[] }[] = [];
@@ -128,21 +95,8 @@ export function analyzeScript(content: string, config: AnalysisConfig = DEFAULT_
           pattern: pattern.toString(),
           matches: matches
         });
-        // Weight different categories
-        switch (category) {
-          case 'evasion':
-            score += 3; // Highest weight for evasion attempts
-            break;
-          case 'covertExecution':
-            score += 3; // Highest weight for covert execution
-            break;
-          case 'securityBypass':
-            score += 2; // Medium weight for security bypass attempts
-            break;
-          case 'maliciousIntent':
-            score += 2; // Medium weight for malicious intent
-            break;
-        }
+        // Add weight for the category
+        score += config.weights[category as ThreatCategory];
       }
     }
   }
@@ -150,14 +104,18 @@ export function analyzeScript(content: string, config: AnalysisConfig = DEFAULT_
   // Check for suspicious combinations
   if (threats.includes('evasion') && 
       (threats.includes('covertExecution') || threats.includes('securityBypass'))) {
-    score += 2; // Multiple evasion techniques indicate malicious intent
+    score += config.scoringRules.suspiciousStringWeight;
   }
 
   // Check for suspicious string patterns
   const suspiciousStrings = config.checkSuspiciousStrings ? detectSuspiciousStrings(content) : [];
   if (suspiciousStrings.length > 0) {
     threats.push('suspicious-strings');
-    score += suspiciousStrings.length;
+    // Add score based on severity of suspicious strings
+    score += suspiciousStrings.reduce((total, match) => {
+      const severityWeight = match.severity === 'high' ? 2 : match.severity === 'medium' ? 1 : 0.5;
+      return total + (match.matches.length * severityWeight * config.scoringRules.suspiciousStringWeight);
+    }, 0);
   }
 
   return {
@@ -171,20 +129,50 @@ export function analyzeScript(content: string, config: AnalysisConfig = DEFAULT_
   };
 }
 
-export function detectSuspiciousStrings(content: string): string[] {
-  const suspicious = [];
-  // Known malicious patterns
-  const maliciousPatterns = [
-    /(?:bypass|evade|disable|override)\s*(?:security|protection|filter|policy)/i,
-    /\.(?:php|asp|jsp|exe|dll|bat|cmd|sh|bash)(?:\?|$)/i,
-    /(?:sql|nosql|command|shell|exec|system)\.(?:injection|attack)/i,
-    /(?:hide|conceal|mask|obscure)\s*(?:execution|code|script|behavior)/i,
-  ];
-  for (const pattern of maliciousPatterns) {
-    const matches = content.match(pattern);
+interface SuspiciousStringMatch {
+  type: 'security-bypass' | 'dangerous-extension' | 'attack-pattern' | 'obfuscation';
+  pattern: string;
+  matches: string[];
+  severity: 'high' | 'medium' | 'low';
+}
+
+export function detectSuspiciousStrings(content: string): SuspiciousStringMatch[] {
+  const suspicious: SuspiciousStringMatch[] = [];
+  
+  const patterns = {
+    'security-bypass': {
+      // Look for actual security bypass techniques
+      regex: /(?:document\.domain\s*=\s*['"]\*['"]|Object\.defineProperty\s*\(\s*(?:window|document|navigator)\s*,\s*['"](?:cookie|userAgent|referrer)['"]|delete\s+window\.(?:alert|confirm|prompt)|window\.(?:alert|confirm|prompt)\s*=\s*function)/i,
+      severity: 'high' as const
+    },
+    'dangerous-extension': {
+      // Look for actual dangerous file operations and extensions
+      regex: /(?:\.(?:php|asp|jsp|exe|dll|bat|cmd|sh|bash)(?:\?|$)|(?:file|path)\.(?:exists|create|write|delete)|fs\.(?:writeFile|unlink|rmdir)|child_process\.(?:exec|spawn))/i,
+      severity: 'high' as const
+    },
+    'attack-pattern': {
+      // Look for actual attack techniques
+      regex: /(?:UNION\s+ALL\s+SELECT|exec\s*\(\s*['"]|sp_executesql|eval\s*\(\s*['"]|document\.write\s*\(\s*['"]<script|unescape\s*\(\s*['"]%u|String\.fromCharCode\s*\(\s*\d+\s*\))/i,
+      severity: 'high' as const
+    },
+    'obfuscation': {
+      // Look for actual code obfuscation techniques
+      regex: /(?:[a-zA-Z0-9]{20,}|(?:0x[0-9a-fA-F]{2}\s*,\s*){10,}|(?:\\x[0-9a-fA-F]{2}){10,}|(?:%[0-9a-fA-F]{2}){10,}|(?:[+\-*/%&|^~]{3,})|(?:[a-z]\s*=\s*[a-z](?:\s*[+\-*/%&|^~]\s*[a-z])+))/i,
+      severity: 'medium' as const
+    }
+  };
+
+  for (const [type, { regex, severity }] of Object.entries(patterns)) {
+    const matches = content.match(regex);
     if (matches) {
-      suspicious.push(`suspicious-pattern:${pattern.toString()}`);
+      suspicious.push({
+        type: type as SuspiciousStringMatch['type'],
+        pattern: regex.toString(),
+        matches: matches,
+        severity
+      });
     }
   }
+
   return suspicious;
 } 

@@ -46,13 +46,23 @@ export class ScriptBlocker {
 
   public async shouldBlockScript(url: string, content: string): Promise<{ blocked: boolean; reason?: string; analysis?: any }> {
     // Check if script is blacklisted
-    const isBlacklisted = this.config.blacklistedHosts?.some(host => url.includes(host));
+    const isBlacklisted = this.config.blackListedScripts?.some(pattern => url.includes(pattern));
     if (isBlacklisted) {
       this.blockedScripts.set(url, {
         url,
         reason: 'Blacklisted script'
       });
       return { blocked: true, reason: 'Blacklisted script' };
+    }
+
+    // Check if script is whitelisted
+    const isWhitelisted = this.config.whiteListedScripts?.some(pattern => url.includes(pattern));
+    if (isWhitelisted) {
+      this.blockedScripts.set(url, {
+        url,
+        reason: 'Whitelisted script'
+      });
+      return { blocked: false, reason: 'Whitelisted script' };
     }
 
     // Check cache first

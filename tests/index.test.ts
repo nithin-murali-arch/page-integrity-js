@@ -1,7 +1,7 @@
 import { PageIntegrity, mergeConfig, exposeGlobally } from '../src/index';
-import { ScriptBlocker } from '../src/script-blocking';
+import { ScriptBlocker } from '../src/utils/script-blocker';
 import { CacheManager } from '../src/utils/cache-manager';
-import { PageIntegrityConfig } from '../src/types';
+import { PageIntegrityConfig, BlockedEventInfo } from '../src/types/index';
 import { DEFAULT_ANALYSIS_CONFIG } from '../src/utils/script-analyzer';
 
 // Mock the script interceptor and script blocker
@@ -12,7 +12,7 @@ jest.mock('../src/utils/script-interceptor', () => ({
   }))
 }));
 
-jest.mock('../src/script-blocking', () => ({
+jest.mock('../src/utils/script-blocker', () => ({
   ScriptBlocker: jest.fn().mockImplementation(() => ({
     shouldBlockScript: jest.fn().mockResolvedValue({ blocked: false })
   }))
@@ -35,9 +35,23 @@ describe('PageIntegrity', () => {
   beforeEach(() => {
     blockedEvents = [];
     config = {
-      whitelistedHosts: ['good.com'],
-      blacklistedHosts: ['bad.com'],
-      onBlocked: (event: any) => blockedEvents.push(event)
+      enabled: true,
+      debug: false,
+      strictMode: false,
+      allowedDomains: ['good.com'],
+      blockedDomains: ['bad.com'],
+      allowedScripts: [],
+      blockedScripts: [],
+      allowDynamicInline: true,
+      allowedMutations: {
+        elementTypes: ['div', 'span', 'p'],
+        maxMutations: 100,
+        maxDepth: 3
+      },
+      analysisConfig: DEFAULT_ANALYSIS_CONFIG,
+      callbacks: {
+        onScriptBlocked: (event: any) => blockedEvents.push(event)
+      }
     };
 
     mockScriptBlocker = {
@@ -81,7 +95,6 @@ describe('PageIntegrity', () => {
     it('should initialize with merged config', () => {
       const pi = new PageIntegrity(config);
       expect(pi['config']).toEqual({
-        allowDynamicInline: true,
         ...config,
         analysisConfig: DEFAULT_ANALYSIS_CONFIG
       });
@@ -91,12 +104,11 @@ describe('PageIntegrity', () => {
   describe('updateConfig', () => {
     it('should update config and reinitialize script blocker', () => {
       const pi = new PageIntegrity(config);
-      const newConfig: PageIntegrityConfig = {
-        blacklistedHosts: ['new-bad.com']
+      const newConfig: Partial<PageIntegrityConfig> = {
+        blockedDomains: ['new-bad.com']
       };
       pi.updateConfig(newConfig);
       expect(pi['config']).toEqual({
-        allowDynamicInline: true,
         ...config,
         ...newConfig,
         analysisConfig: DEFAULT_ANALYSIS_CONFIG
@@ -105,7 +117,7 @@ describe('PageIntegrity', () => {
   });
 
   describe('script blocking', () => {
-    it('should allow scripts from whitelisted origins', async () => {
+    it('should allow scripts from allowed domains', async () => {
       const pi = new PageIntegrity(config);
       const script = document.createElement('script');
       script.src = 'https://good.com/safe.js';
@@ -120,7 +132,7 @@ describe('PageIntegrity', () => {
       expect(blockedEvents.length).toBe(0);
     });
 
-    it('should handle unknown origins', async () => {
+    it('should handle unknown domains', async () => {
       const pi = new PageIntegrity(config);
       const script = document.createElement('script');
       script.src = 'https://neutral.com/neutral.js';
@@ -139,18 +151,29 @@ describe('PageIntegrity', () => {
   describe('mergeConfig', () => {
     it('should merge configs correctly', () => {
       const defaults: PageIntegrityConfig = {
+        enabled: true,
+        debug: false,
+        strictMode: false,
+        allowedDomains: ['default.com'],
+        blockedDomains: [],
+        allowedScripts: [],
+        blockedScripts: [],
         allowDynamicInline: true,
-        whitelistedHosts: ['default.com']
+        allowedMutations: {
+          elementTypes: ['div', 'span', 'p'],
+          maxMutations: 100,
+          maxDepth: 3
+        },
+        analysisConfig: DEFAULT_ANALYSIS_CONFIG
       };
-      const custom: PageIntegrityConfig = {
-        whitelistedHosts: ['custom.com'],
-        blacklistedHosts: ['bad.com']
+      const custom: Partial<PageIntegrityConfig> = {
+        allowedDomains: ['custom.com'],
+        blockedDomains: ['bad.com']
       };
-      const result = mergeConfig(defaults, custom);
+      const result = mergeConfig(defaults, custom as PageIntegrityConfig);
       expect(result).toEqual({
-        allowDynamicInline: true,
-        whitelistedHosts: ['custom.com'],
-        blacklistedHosts: ['bad.com'],
+        ...defaults,
+        ...custom,
         analysisConfig: DEFAULT_ANALYSIS_CONFIG
       });
     });
@@ -170,6 +193,178 @@ describe('PageIntegrity', () => {
       expect(() => exposeGlobally(class {}, 'TestClass')).not.toThrow();
 
       (global as any).window = originalWindow;
+    });
+  });
+
+  describe('configuration', () => {
+    it('should handle strict mode configuration', () => {
+      const strictConfig: PageIntegrityConfig = {
+        ...config,
+        strictMode: true
+      };
+      const pi = new PageIntegrity(strictConfig);
+      expect(pi['config'].strictMode).toBe(true);
+    });
+
+    it('should handle debug mode configuration', () => {
+      const debugConfig: PageIntegrityConfig = {
+        ...config,
+        debug: true
+      };
+      const pi = new PageIntegrity(debugConfig);
+      expect(pi['config'].debug).toBe(true);
+    });
+
+    it('should handle allowed mutations configuration', () => {
+      const mutationsConfig: PageIntegrityConfig = {
+        ...config,
+        allowedMutations: {
+          elementTypes: ['div', 'span'],
+          maxMutations: 50,
+          maxDepth: 2
+        }
+      };
+      const pi = new PageIntegrity(mutationsConfig);
+      expect(pi['config'].allowedMutations).toEqual({
+        elementTypes: ['div', 'span'],
+        maxMutations: 50,
+        maxDepth: 2
+      });
+    });
+
+    it('should handle analysis configuration', () => {
+      const analysisConfig: PageIntegrityConfig = {
+        ...config,
+        analysisConfig: {
+          minScore: 5,
+          maxThreats: 3,
+          checkSuspiciousStrings: true,
+          weights: {
+            evasion: 4,
+            covertExecution: 4,
+            securityBypass: 3,
+            maliciousIntent: 3
+          },
+          scoringRules: {
+            minSafeScore: 5,
+            maxThreats: 3,
+            suspiciousStringWeight: 2
+          }
+        }
+      };
+      const pi = new PageIntegrity(analysisConfig);
+      expect(pi['config'].analysisConfig).toEqual(analysisConfig.analysisConfig);
+    });
+  });
+
+  describe('callbacks', () => {
+    let mutationEvents: BlockedEventInfo[];
+    let networkEvents: BlockedEventInfo[];
+    let storageEvents: BlockedEventInfo[];
+    let cookieEvents: BlockedEventInfo[];
+    let iframeEvents: BlockedEventInfo[];
+    let workerEvents: BlockedEventInfo[];
+    let websocketEvents: BlockedEventInfo[];
+
+    beforeEach(() => {
+      mutationEvents = [];
+      networkEvents = [];
+      storageEvents = [];
+      cookieEvents = [];
+      iframeEvents = [];
+      workerEvents = [];
+      websocketEvents = [];
+
+      config.callbacks = {
+        onScriptBlocked: (event) => blockedEvents.push(event),
+        onMutationBlocked: (event) => mutationEvents.push(event),
+        onNetworkBlocked: (event) => networkEvents.push(event),
+        onStorageBlocked: (event) => storageEvents.push(event),
+        onCookieBlocked: (event) => cookieEvents.push(event),
+        onIframeBlocked: (event) => iframeEvents.push(event),
+        onWorkerBlocked: (event) => workerEvents.push(event),
+        onWebsocketBlocked: (event) => websocketEvents.push(event)
+      };
+    });
+
+    it('should call onMutationBlocked when mutation is blocked', () => {
+      const pi = new PageIntegrity(config);
+      const event: BlockedEventInfo = {
+        type: 'mutation',
+        timestamp: Date.now(),
+        context: {
+          elementType: 'div',
+          mutationType: 'insert'
+        }
+      };
+      pi['config'].callbacks?.onMutationBlocked?.(event);
+      expect(mutationEvents).toContainEqual(event);
+    });
+
+    it('should call onNetworkBlocked when network request is blocked', () => {
+      const pi = new PageIntegrity(config);
+      const event: BlockedEventInfo = {
+        type: 'network',
+        timestamp: Date.now(),
+        url: 'https://blocked.com/script.js'
+      };
+      pi['config'].callbacks?.onNetworkBlocked?.(event);
+      expect(networkEvents).toContainEqual(event);
+    });
+
+    it('should call onStorageBlocked when storage access is blocked', () => {
+      const pi = new PageIntegrity(config);
+      const event: BlockedEventInfo = {
+        type: 'storage',
+        timestamp: Date.now(),
+        details: { operation: 'setItem', key: 'sensitive' }
+      };
+      pi['config'].callbacks?.onStorageBlocked?.(event);
+      expect(storageEvents).toContainEqual(event);
+    });
+
+    it('should call onCookieBlocked when cookie access is blocked', () => {
+      const pi = new PageIntegrity(config);
+      const event: BlockedEventInfo = {
+        type: 'cookie',
+        timestamp: Date.now(),
+        details: { operation: 'set', name: 'tracking' }
+      };
+      pi['config'].callbacks?.onCookieBlocked?.(event);
+      expect(cookieEvents).toContainEqual(event);
+    });
+
+    it('should call onIframeBlocked when iframe is blocked', () => {
+      const pi = new PageIntegrity(config);
+      const event: BlockedEventInfo = {
+        type: 'iframe',
+        timestamp: Date.now(),
+        url: 'https://blocked.com/iframe.html'
+      };
+      pi['config'].callbacks?.onIframeBlocked?.(event);
+      expect(iframeEvents).toContainEqual(event);
+    });
+
+    it('should call onWorkerBlocked when worker is blocked', () => {
+      const pi = new PageIntegrity(config);
+      const event: BlockedEventInfo = {
+        type: 'worker',
+        timestamp: Date.now(),
+        url: 'https://blocked.com/worker.js'
+      };
+      pi['config'].callbacks?.onWorkerBlocked?.(event);
+      expect(workerEvents).toContainEqual(event);
+    });
+
+    it('should call onWebsocketBlocked when websocket is blocked', () => {
+      const pi = new PageIntegrity(config);
+      const event: BlockedEventInfo = {
+        type: 'websocket',
+        timestamp: Date.now(),
+        url: 'wss://blocked.com/socket'
+      };
+      pi['config'].callbacks?.onWebsocketBlocked?.(event);
+      expect(websocketEvents).toContainEqual(event);
     });
   });
 }); 
