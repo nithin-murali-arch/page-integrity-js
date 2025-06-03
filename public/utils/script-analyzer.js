@@ -87,58 +87,69 @@ export function analyzeScript(content, config = DEFAULT_ANALYSIS_CONFIG) {
                     pattern: pattern.toString(),
                     matches: matches
                 });
-                // Weight different categories
-                switch (category) {
-                    case 'evasion':
-                        score += 3; // Highest weight for evasion attempts
-                        break;
-                    case 'covertExecution':
-                        score += 3; // Highest weight for covert execution
-                        break;
-                    case 'securityBypass':
-                        score += 2; // Medium weight for security bypass attempts
-                        break;
-                    case 'maliciousIntent':
-                        score += 2; // Medium weight for malicious intent
-                        break;
-                }
+                // Add weight for the category
+                score += config.weights[category];
             }
         }
     }
     // Check for suspicious combinations
     if (threats.includes('evasion') &&
         (threats.includes('covertExecution') || threats.includes('securityBypass'))) {
-        score += 2; // Multiple evasion techniques indicate malicious intent
+        score += config.scoringRules.suspiciousStringWeight;
     }
     // Check for suspicious string patterns
     const suspiciousStrings = config.checkSuspiciousStrings ? detectSuspiciousStrings(content) : [];
     if (suspiciousStrings.length > 0) {
         threats.push('suspicious-strings');
-        score += suspiciousStrings.length;
+        // Add score based on severity of suspicious strings
+        score += suspiciousStrings.reduce((total, match) => {
+            const severityWeight = match.severity === 'high' ? 2 : match.severity === 'medium' ? 1 : 0.5;
+            return total + (match.matches.length * severityWeight * config.scoringRules.suspiciousStringWeight);
+        }, 0);
     }
     return {
         threats,
         score,
         details,
         analysisDetails: {
-            suspiciousStrings,
+            suspiciousStrings: suspiciousStrings.map(match => match.pattern),
             categories: [...new Set(threats)]
         }
     };
 }
 export function detectSuspiciousStrings(content) {
     const suspicious = [];
-    // Known malicious patterns
-    const maliciousPatterns = [
-        /(?:bypass|evade|disable|override)\s*(?:security|protection|filter|policy)/i,
-        /\.(?:php|asp|jsp|exe|dll|bat|cmd|sh|bash)(?:\?|$)/i,
-        /(?:sql|nosql|command|shell|exec|system)\.(?:injection|attack)/i,
-        /(?:hide|conceal|mask|obscure)\s*(?:execution|code|script|behavior)/i,
-    ];
-    for (const pattern of maliciousPatterns) {
-        const matches = content.match(pattern);
+    const patterns = {
+        'security-bypass': {
+            // Look for actual security bypass techniques
+            regex: /(?:document\.domain\s*=\s*['"]\*['"]|Object\.defineProperty\s*\(\s*(?:window|document|navigator)\s*,\s*['"](?:cookie|userAgent|referrer)['"]|delete\s+window\.(?:alert|confirm|prompt)|window\.(?:alert|confirm|prompt)\s*=\s*function)/i,
+            severity: 'high'
+        },
+        'dangerous-extension': {
+            // Look for actual dangerous file operations and extensions
+            regex: /(?:\.(?:php|asp|jsp|exe|dll|bat|cmd|sh|bash)(?:\?|$)|(?:file|path)\.(?:exists|create|write|delete)|fs\.(?:writeFile|unlink|rmdir)|child_process\.(?:exec|spawn))/i,
+            severity: 'high'
+        },
+        'attack-pattern': {
+            // Look for actual attack techniques
+            regex: /(?:UNION\s+ALL\s+SELECT|exec\s*\(\s*['"]|sp_executesql|eval\s*\(\s*['"]|document\.write\s*\(\s*['"]<script|unescape\s*\(\s*['"]%u|String\.fromCharCode\s*\(\s*\d+\s*\))/i,
+            severity: 'high'
+        },
+        'obfuscation': {
+            // Look for actual code obfuscation techniques
+            regex: /(?:[a-zA-Z0-9]{20,}|(?:0x[0-9a-fA-F]{2}\s*,\s*){10,}|(?:\\x[0-9a-fA-F]{2}){10,}|(?:%[0-9a-fA-F]{2}){10,}|(?:[+\-*/%&|^~]{3,})|(?:[a-z]\s*=\s*[a-z](?:\s*[+\-*/%&|^~]\s*[a-z])+))/i,
+            severity: 'medium'
+        }
+    };
+    for (const [type, { regex, severity }] of Object.entries(patterns)) {
+        const matches = content.match(regex);
         if (matches) {
-            suspicious.push(`suspicious-pattern:${pattern.toString()}`);
+            suspicious.push({
+                type: type,
+                pattern: regex.toString(),
+                matches: matches,
+                severity
+            });
         }
     }
     return suspicious;

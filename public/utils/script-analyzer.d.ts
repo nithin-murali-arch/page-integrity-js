@@ -1,36 +1,11 @@
-export interface AnalysisConfig {
-    minScore: number;
-    maxThreats: number;
-    checkSuspiciousStrings: boolean;
-    weights: {
-        evasion: number;
-        covertExecution: number;
-        securityBypass: number;
-        maliciousIntent: number;
-    };
-    scoringRules: {
-        minSafeScore: number;
-        maxThreats: number;
-        suspiciousStringWeight: number;
-    };
-}
+import { AnalysisConfig, ScriptAnalysis } from '../types/index';
 export declare const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig;
-export interface ScriptAnalysis {
-    threats: string[];
-    score: number;
-    details: {
-        pattern: string;
-        matches: string[];
-    }[];
-    analysisDetails?: {
-        suspiciousStrings?: string[];
-        categories?: string[];
-        staticScore?: number;
-        dynamicScore?: number;
-        originScore?: number;
-        hashScore?: number;
-    };
-    isMalicious?: boolean;
-}
 export declare function analyzeScript(content: string, config?: AnalysisConfig): ScriptAnalysis;
-export declare function detectSuspiciousStrings(content: string): string[];
+interface SuspiciousStringMatch {
+    type: 'security-bypass' | 'dangerous-extension' | 'attack-pattern' | 'obfuscation';
+    pattern: string;
+    matches: string[];
+    severity: 'high' | 'medium' | 'low';
+}
+export declare function detectSuspiciousStrings(content: string): SuspiciousStringMatch[];
+export {};

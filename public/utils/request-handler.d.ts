@@ -6,7 +6,7 @@ export declare function fetchAndClone(request: Request): Promise<{
 export declare function shouldAnalyzeScript(request: Request, response: Response): boolean;
 export declare function analyzeAndCacheScript(text: string, url: string, cacheManager: CacheManager): Promise<{
     hash: string;
-    analysis: import("./script-analyzer").ScriptAnalysis;
+    analysis: import("../types").ScriptAnalysis;
 }>;
 export declare function cacheNonScript(text: string, url: string, cacheManager: CacheManager): Promise<{
     hash: string;

@@ -51,28 +51,13 @@ export interface AllowedMutations {
   patterns: RegExp[];
 }
 
-export function mergeConfig(defaults: PageIntegrityConfig, config: PageIntegrityConfig): PageIntegrityConfig {
-  const mergedConfig = { ...defaults, ...config };
-  
-  // Deep merge analysis config if provided
-  if (config.analysisConfig) {
-    mergedConfig.analysisConfig = {
-      ...DEFAULT_ANALYSIS_CONFIG,
-      ...config.analysisConfig,
-      weights: {
-        ...DEFAULT_ANALYSIS_CONFIG.weights,
-        ...config.analysisConfig.weights
-      },
-      scoringRules: {
-        ...DEFAULT_ANALYSIS_CONFIG.scoringRules,
-        ...config.analysisConfig.scoringRules
-      }
-    };
-  } else {
-    mergedConfig.analysisConfig = DEFAULT_ANALYSIS_CONFIG;
-  }
-
-  return mergedConfig;
+export function mergeConfig(defaults: Partial<PageIntegrityConfig>, config: Partial<PageIntegrityConfig>): PageIntegrityConfig {
+  return {
+    strictMode: config.strictMode ?? defaults.strictMode ?? false,
+    whiteListedScripts: config.whiteListedScripts ?? defaults.whiteListedScripts ?? [],
+    blackListedScripts: config.blackListedScripts ?? defaults.blackListedScripts ?? [],
+    analysisConfig: config.analysisConfig ?? defaults.analysisConfig ?? DEFAULT_ANALYSIS_CONFIG
+  };
 }
 
 export function initScriptBlocker(config: PageIntegrityConfig, cacheManager: CacheManager): ScriptBlocker {
@@ -108,7 +93,7 @@ export class PageIntegrity {
    * @param config Configuration options for script and DOM mutation monitoring.
    */
   constructor(config: PageIntegrityConfig) {
-    this.config = mergeConfig({ allowDynamicInline: true }, config);
+    this.config = mergeConfig({}, config);
     this.cacheManager = new CacheManager();
     this.scriptBlocker = initScriptBlocker(this.config, this.cacheManager);
     this.scriptInterceptor = new ScriptInterceptor(this.scriptBlocker);

@@ -1,4 +1,4 @@
-import { ScriptAnalysis } from './script-analyzer';
+import { ScriptAnalysis } from '../types';
 
 const CACHE_NAME = 'response-cache';
 const MAX_CACHE_SIZE = 2500;

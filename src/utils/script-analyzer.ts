@@ -123,7 +123,7 @@ export function analyzeScript(content: string, config: AnalysisConfig = DEFAULT_
     score,
     details,
     analysisDetails: {
-      suspiciousStrings,
+      suspiciousStrings: suspiciousStrings.map(match => match.pattern),
       categories: [...new Set(threats)]
     }
   };

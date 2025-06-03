@@ -1,4 +1,4 @@
-import { ScriptAnalysis } from './script-analyzer';
+import { ScriptAnalysis } from '../types';
 export interface CacheEntry {
     url: string;
     analysis?: ScriptAnalysis;
