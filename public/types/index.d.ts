@@ -110,6 +110,8 @@ export interface PageIntegrityConfig {
     blackListedScripts: string[];
     /** Configuration for script analysis */
     analysisConfig: AnalysisConfig;
+    /** Callback function that is called when a script is blocked */
+    onBlocked?: (info: BlockedEventInfo) => void;
 }
 /** Information about a blocked script */
 export interface BlockedScript {
