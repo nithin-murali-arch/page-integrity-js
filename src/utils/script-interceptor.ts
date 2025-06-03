@@ -1,4 +1,5 @@
 import { ScriptBlocker } from './script-blocker';
+import { TrustedScript, TrustedURL } from '../types';
 
 interface BlockResult {
   blocked: boolean;
@@ -16,117 +17,106 @@ export function interceptGlobalMethods(scriptBlocker: ScriptBlocker): void {
     return;
   }
 
+  // Intercept eval
   const originalEval = window.eval;
-  const originalFunction = Function;
-  const originalSetTimeout = window.setTimeout;
-  const originalSetInterval = window.setInterval;
-  const originalXHROpen = XMLHttpRequest.prototype.open;
-  const originalXHRSend = XMLHttpRequest.prototype.send;
-  const originalFetch = window.fetch;
-
-  window.eval = function(code: string): any {
-    // Always analyze eval since it's inherently risky
-    const result = scriptBlocker.shouldBlockScript('eval', code);
-    if (result instanceof Promise) {
-      return result.then((res: BlockResult) => {
-        if (res?.blocked) {
-          console.warn(`Blocked eval: ${res.reason}`);
-          return undefined;
-        }
-        return originalEval.call(window, code);
-      });
+  window.eval = async function(code: TrustedScript | string): Promise<any> {
+    const codeStr = String(code);
+    const result = await scriptBlocker.shouldBlockScript('eval', codeStr);
+    if (result.blocked) {
+      console.warn(`Blocked eval: ${result.reason}`);
+      return undefined;
     }
+    // Pass the original code to the original eval
     return originalEval.call(window, code);
   };
 
-  Function = function(...args: string[]): Function {
-    const code = args[args.length - 1];
-    // Always analyze Function constructor since it's inherently risky
-    const result = scriptBlocker.shouldBlockScript('Function', code);
-    if (result instanceof Promise) {
-      console.warn('Async script blocking not supported for Function constructor');
-      return function() { return undefined; };
-    }
-    const blockResult = result as BlockResult;
-    if (blockResult?.blocked) {
-      console.warn(`Blocked Function: ${blockResult.reason}`);
-      return function() { return undefined; };
-    }
-    return originalFunction.apply(null, args);
+  // Intercept Function constructor
+  const originalFunction = window.Function;
+  window.Function = function(...args: (TrustedScript | string)[]): Function {
+    // Get the function body (last argument)
+    const body = args[args.length - 1];
+    const bodyStr = String(body);
+    
+    // Create the function first
+    const fn = originalFunction.apply(window, args);
+    
+    // Wrap it to check on execution
+    return function(this: any, ...execArgs: any[]) {
+      // Check if the function body should be blocked
+      scriptBlocker.shouldBlockScript('Function', bodyStr).then(result => {
+        if (result.blocked) {
+          console.warn(`Blocked Function execution: ${result.reason}`);
+          throw new Error(`Blocked function execution: ${result.reason}`);
+        }
+      });
+      
+      // Call the original function
+      return fn.apply(this, execArgs);
+    } as unknown as Function;
   } as any;
 
-  window.setTimeout = function(handler: TimerHandler, timeout?: number, ...args: any[]): ReturnType<typeof setTimeout> {
-    if (typeof handler === 'string') {
-      // Only analyze string-based timeouts
-      const result = scriptBlocker.shouldBlockScript('setTimeout', handler);
-      if (result instanceof Promise) {
-        const promise = result.then((res: BlockResult) => {
-          if (res?.blocked) {
-            console.warn(`Blocked setTimeout: ${res.reason}`);
-            return 0;
-          }
-          return originalSetTimeout.call(window, handler as unknown as (...args: any[]) => void, timeout, ...args as []);
-        });
-        return promise as unknown as ReturnType<typeof setTimeout>;
+  // Intercept setTimeout
+  const originalSetTimeout = window.setTimeout;
+  window.setTimeout = async function(handler: TimerHandler, timeout?: number, ...args: unknown[]): Promise<NodeJS.Timeout> {
+    if (typeof handler === 'string' || typeof handler === 'object') {
+      const handlerStr = String(handler);
+      const result = await scriptBlocker.shouldBlockScript('setTimeout', handlerStr);
+      if (result.blocked) {
+        console.warn(`Blocked setTimeout: ${result.reason}`);
+        return 0 as unknown as NodeJS.Timeout;
       }
     }
-    return originalSetTimeout.call(window, handler as unknown as (...args: any[]) => void, timeout, ...args as []);
+    // Pass the original handler to the original setTimeout
+    // @ts-ignore - TypeScript is too strict about timer function arguments
+    return originalSetTimeout(handler, timeout, ...args) as unknown as NodeJS.Timeout;
   } as unknown as typeof setTimeout;
 
-  window.setInterval = function(handler: TimerHandler, timeout?: number, ...args: any[]): ReturnType<typeof setInterval> {
-    if (typeof handler === 'string') {
-      // Only analyze string-based intervals
-      const result = scriptBlocker.shouldBlockScript('setInterval', handler);
-      if (result instanceof Promise) {
-        const promise = result.then((res: BlockResult) => {
-          if (res?.blocked) {
-            console.warn(`Blocked setInterval: ${res.reason}`);
-            return 0;
-          }
-          return originalSetInterval.call(window, handler as unknown as (...args: any[]) => void, timeout, ...args as []);
-        });
-        return promise as unknown as ReturnType<typeof setInterval>;
+  // Intercept setInterval
+  const originalSetInterval = window.setInterval;
+  window.setInterval = async function(handler: TimerHandler, timeout?: number, ...args: unknown[]): Promise<NodeJS.Timeout> {
+    if (typeof handler === 'string' || typeof handler === 'object') {
+      const handlerStr = String(handler);
+      const result = await scriptBlocker.shouldBlockScript('setInterval', handlerStr);
+      if (result.blocked) {
+        console.warn(`Blocked setInterval: ${result.reason}`);
+        return 0 as unknown as NodeJS.Timeout;
       }
     }
-    return originalSetInterval.call(window, handler as unknown as (...args: any[]) => void, timeout, ...args as []);
+    // Pass the original handler to the original setInterval
+    // @ts-ignore - TypeScript is too strict about timer function arguments
+    return originalSetInterval(handler, timeout, ...args) as unknown as NodeJS.Timeout;
   } as unknown as typeof setInterval;
 
-  XMLHttpRequest.prototype.open = async function(method: string, url: string | URL, async: boolean = true, username: string | null = null, password: string | null = null): Promise<void> {
-    if (url.toString().endsWith('.js')) {
-      // Only analyze JavaScript files
-      try {
-        const result = await scriptBlocker.shouldBlockScript(url.toString(), '');
-        if (result?.blocked) {
-          console.warn(`Blocked XHR: ${result.reason}`);
-          throw new Error(`Blocked script: ${result.reason}`);
-        }
-      } catch (error) {
-        console.error('Error in XHR open:', error);
-        throw error;
+  // Intercept XMLHttpRequest
+  const originalXHROpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = async function(method: string, url: string | URL | TrustedURL, async: boolean = true, username: string | null = null, password: string | null = null): Promise<void> {
+    const urlStr = String(url);
+    if (urlStr.endsWith('.js')) {
+      const result = await scriptBlocker.shouldBlockScript(urlStr, '');
+      if (result.blocked) {
+        throw new Error(`Blocked script: ${result.reason}`);
       }
     }
+    // Pass the original url to the original open
     return originalXHROpen.call(this, method, url, async, username, password);
   };
 
-  XMLHttpRequest.prototype.send = function(body?: XMLHttpRequestBodyInit | null): void {
-    return originalXHRSend.call(this, body);
-  };
-
-  window.fetch = async function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    const url = input instanceof Request ? input.url : input.toString();
+  // Intercept fetch
+  const originalFetch = window.fetch;
+  window.fetch = async function(input: RequestInfo | URL | TrustedURL, init?: RequestInit): Promise<Response> {
+    let url: string;
+    if (input instanceof Request) {
+      url = String(input.url);
+    } else {
+      url = String(input);
+    }
     if (url.endsWith('.js')) {
-      // Only analyze JavaScript files
-      try {
-        const result = await scriptBlocker.shouldBlockScript(url, '');
-        if (result?.blocked) {
-          console.warn(`Blocked fetch: ${result.reason}`);
-          throw new Error(`Blocked script: ${result.reason}`);
-        }
-      } catch (error) {
-        console.error('Error in fetch:', error);
-        throw error;
+      const result = await scriptBlocker.shouldBlockScript(url, '');
+      if (result.blocked) {
+        throw new Error(`Blocked script: ${result.reason}`);
       }
     }
+    // Pass the original input to the original fetch
     return originalFetch.call(window, input, init);
   };
 }
@@ -136,7 +126,7 @@ export function interceptGlobalMethods(scriptBlocker: ScriptBlocker): void {
  */
 export class ScriptInterceptor {
   private scriptBlocker: ScriptBlocker;
-  private _isRunning: boolean = false;
+  private isStarted: boolean = false;
 
   public constructor(scriptBlocker: ScriptBlocker) {
     this.scriptBlocker = scriptBlocker;
@@ -147,16 +137,15 @@ export class ScriptInterceptor {
   }
 
   public start(): void {
-    if (this._isRunning) return;
-    this._isRunning = true;
+    if (this.isStarted) {
+      return;
+    }
+    this.isStarted = true;
     interceptGlobalMethods(this.scriptBlocker);
   }
 
   public stop(): void {
-    if (!this._isRunning) return;
-    this._isRunning = false;
-    // Note: We can't easily restore the original methods
-    // as they might have been modified by other code
+    this.isStarted = false;
   }
 }
 
@@ -174,8 +163,11 @@ export async function interceptScriptElement(script: HTMLScriptElement, scriptBl
   const src = script.src;
   const content = script.textContent || '';
 
-  const result = await scriptBlocker.shouldBlockScript(src || 'inline', content);
-  if (result?.blocked) {
+  const srcStr = String(src || 'inline');
+  const contentStr = String(content);
+
+  const result = await scriptBlocker.shouldBlockScript(srcStr, contentStr);
+  if (result.blocked) {
     console.warn(`Blocked script: ${result.reason}`);
     script.remove();
   }

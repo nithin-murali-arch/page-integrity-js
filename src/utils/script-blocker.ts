@@ -1,15 +1,15 @@
 import { analyzeScript as analyzeScriptContent, DEFAULT_ANALYSIS_CONFIG } from './script-analyzer';
 import { createHash } from './hash';
 import { CacheManager } from './cache-manager';
-import { PageIntegrityConfig } from '../types';
+import { PageIntegrityConfig, TrustedScript, TrustedURL } from '../types';
 
 export interface BlockedScript {
-  url: string;
+  url: TrustedURL | string;
   reason: string;
   analysis?: any;
 }
 
-export async function checkCachedResponse(cacheManager: CacheManager, url: string, content: string): Promise<{ blocked: boolean; reason?: string; analysis?: any }> {
+export async function checkCachedResponse(cacheManager: CacheManager, url: TrustedURL | string, content: TrustedScript | string): Promise<{ blocked: boolean; reason?: string; analysis?: any }> {
   const hash = createHash(content);
   const cached = await cacheManager.getCachedResponse(hash);
   if (cached && cached.analysis) {
@@ -21,7 +21,7 @@ export async function checkCachedResponse(cacheManager: CacheManager, url: strin
   return { blocked: false };
 }
 
-export async function analyzeAndBlockScript(scriptBlocker: ScriptBlocker, url: string, content: string): Promise<{ blocked: boolean; reason?: string; analysis?: any }> {
+export async function analyzeAndBlockScript(scriptBlocker: ScriptBlocker, url: TrustedURL | string, content: TrustedScript | string): Promise<{ blocked: boolean; reason?: string; analysis?: any }> {
   const analysis = analyzeScriptContent(content);
   const config = scriptBlocker['config']?.analysisConfig ?? DEFAULT_ANALYSIS_CONFIG;
   if (analysis.score >= config.minScore || analysis.threats.length >= config.maxThreats) {
@@ -32,7 +32,7 @@ export async function analyzeAndBlockScript(scriptBlocker: ScriptBlocker, url: s
 
 export class ScriptBlocker {
   private cacheManager: CacheManager;
-  private blockedScripts: Map<string, BlockedScript>;
+  private blockedScripts: Map<TrustedURL | string, BlockedScript>;
   private config: PageIntegrityConfig;
 
   public constructor(cacheManager: CacheManager, config: PageIntegrityConfig) {
@@ -44,7 +44,7 @@ export class ScriptBlocker {
     };
   }
 
-  public async shouldBlockScript(url: string, content: string): Promise<{ blocked: boolean; reason?: string; analysis?: any }> {
+  public async shouldBlockScript(url: TrustedURL | string, content: TrustedScript | string): Promise<{ blocked: boolean; reason?: string; analysis?: any }> {
     // Check if script is blacklisted
     const isBlacklisted = this.config.blackListedScripts?.some(pattern => url.includes(pattern));
     if (isBlacklisted) {
@@ -121,11 +121,11 @@ export class ScriptBlocker {
     return { blocked: false, analysis };
   }
 
-  public isScriptBlocked(url: string): boolean {
+  public isScriptBlocked(url: TrustedURL | string): boolean {
     return this.blockedScripts.has(url);
   }
 
-  public getBlockedScript(url: string): BlockedScript | undefined {
+  public getBlockedScript(url: TrustedURL | string): BlockedScript | undefined {
     return this.blockedScripts.get(url);
   }
 
