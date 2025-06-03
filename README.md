@@ -43,32 +43,47 @@ pageIntegrity.start();
 
 ## Configuration Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `strictMode` | `boolean` | `false` | When enabled, enforces strict validation of all scripts. In strict mode, any script not explicitly allowed by `whitelistedHosts` will be blocked. |
-| `whitelistedHosts` | `string[]` | `[]` | List of trusted domains allowed to execute scripts. When `strictMode` is true, only these domains can execute scripts. |
-| `blacklistedHosts` | `string[]` | `[]` | List of blocked domains that are not allowed to execute scripts. Scripts from these domains will be blocked regardless of other settings. |
-| `analysisConfig` | `object` | See below | Configuration for script analysis |
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `strictMode` | `boolean` | Enables strict validation mode | `false` |
+| `whiteListedScripts` | `string[]` | List of script URLs or patterns that are allowed to execute | `[]` |
+| `blackListedScripts` | `string[]` | List of script URLs or patterns that are blocked from executing | `[]` |
+| `analysisConfig` | `AnalysisConfig` | Configuration for script analysis | See below |
+| `onBlocked` | `(info: BlockedEventInfo) => void` | Callback function that is called when a script is blocked | `undefined` |
 
-### Analysis Configuration
+### AnalysisConfig
 
-```typescript
-interface AnalysisConfig {
-  minScore: number;        // Minimum score threshold for blocking
-  maxThreats: number;      // Maximum number of threats allowed
-  checkSuspiciousStrings: boolean;  // Whether to check for suspicious strings
-  weights: {
-    evasion: number;       // Weight for evasion techniques
-    covertExecution: number;  // Weight for covert execution
-    securityBypass: number;   // Weight for security bypass attempts
-    maliciousIntent: number;  // Weight for malicious intent
-  };
-  scoringRules: {
-    minSafeScore: number;  // Minimum score for a script to be considered safe
-    maxThreats: number;    // Maximum number of threats allowed
-    suspiciousStringWeight: number;  // Weight for suspicious strings
-  };
-}
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `minScore` | `number` | Minimum threat score to trigger blocking | `0.7` |
+| `maxThreats` | `number` | Maximum number of threats allowed before blocking | `3` |
+| `checkSuspiciousStrings` | `boolean` | Whether to check for suspicious strings | `true` |
+| `weights` | `Record<ThreatCategory, number>` | Weights for different threat categories | See below |
+
+### BlockedEventInfo
+
+The `onBlocked` callback receives a `BlockedEventInfo` object with the following properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `type` | `string` | Type of blocked event (e.g., 'script') |
+| `timestamp` | `number` | Unix timestamp when the event occurred |
+| `url` | `string` | URL of the blocked script |
+| `source` | `string` | Source of the script (e.g., 'external') |
+| `details` | `object` | Additional details about the blocked script |
+
+Example usage of the `onBlocked` callback:
+
+```javascript
+const pageIntegrity = new PageIntegrity({
+  strictMode: true,
+  whiteListedScripts: ['trusted-domain.com'],
+  blackListedScripts: ['malicious-domain.com'],
+  onBlocked: (info) => {
+    console.log('Script blocked:', info);
+    // You can implement custom logging, analytics, or notifications here
+  }
+});
 ```
 
 ## Usage Examples

@@ -1,7 +1,7 @@
 import { PageIntegrity, mergeConfig, exposeGlobally } from '../src/index';
 import { ScriptBlocker } from '../src/utils/script-blocker';
 import { CacheManager } from '../src/utils/cache-manager';
-import { PageIntegrityConfig, BlockedEventInfo } from '../src/types/index';
+import { PageIntegrityConfig, BlockedEventInfo, BlockedEventType } from '../src/types';
 import { DEFAULT_ANALYSIS_CONFIG } from '../src/utils/script-analyzer';
 
 // Mock the script interceptor and script blocker
@@ -29,29 +29,16 @@ jest.mock('../src/utils/cache-manager', () => ({
 describe('PageIntegrity', () => {
   let mockScriptBlocker: jest.Mocked<ScriptBlocker>;
   let mockCacheManager: jest.Mocked<CacheManager>;
-  let blockedEvents: any[];
+  let blockedEvents: BlockedEventInfo[];
   let config: PageIntegrityConfig;
 
   beforeEach(() => {
     blockedEvents = [];
     config = {
-      enabled: true,
-      debug: false,
       strictMode: false,
-      allowedDomains: ['good.com'],
-      blockedDomains: ['bad.com'],
-      allowedScripts: [],
-      blockedScripts: [],
-      allowDynamicInline: true,
-      allowedMutations: {
-        elementTypes: ['div', 'span', 'p'],
-        maxMutations: 100,
-        maxDepth: 3
-      },
-      analysisConfig: DEFAULT_ANALYSIS_CONFIG,
-      callbacks: {
-        onScriptBlocked: (event: any) => blockedEvents.push(event)
-      }
+      whiteListedScripts: ['good.com'],
+      blackListedScripts: ['bad.com'],
+      analysisConfig: DEFAULT_ANALYSIS_CONFIG
     };
 
     mockScriptBlocker = {
@@ -81,23 +68,24 @@ describe('PageIntegrity', () => {
   });
 
   describe('constructor', () => {
-    it('should create instance with default config', () => {
+    it('should initialize with merged config', () => {
       const pi = new PageIntegrity(config);
-      expect(pi).toBeDefined();
-      expect(mockScriptBlocker.shouldBlockScript).not.toHaveBeenCalled();
+      expect(pi['config']).toEqual(config);
+    });
+
+    it('should initialize with default config if none provided', () => {
+      const pi = new PageIntegrity();
+      expect(pi['config']).toEqual({
+        strictMode: false,
+        whiteListedScripts: [],
+        blackListedScripts: [],
+        analysisConfig: DEFAULT_ANALYSIS_CONFIG
+      });
     });
 
     it('should expose PageIntegrity globally', () => {
       new PageIntegrity(config);
       expect((window as any).PageIntegrity).toBe(PageIntegrity);
-    });
-
-    it('should initialize with merged config', () => {
-      const pi = new PageIntegrity(config);
-      expect(pi['config']).toEqual({
-        ...config,
-        analysisConfig: DEFAULT_ANALYSIS_CONFIG
-      });
     });
   });
 
@@ -105,13 +93,12 @@ describe('PageIntegrity', () => {
     it('should update config and reinitialize script blocker', () => {
       const pi = new PageIntegrity(config);
       const newConfig: Partial<PageIntegrityConfig> = {
-        blockedDomains: ['new-bad.com']
+        blackListedScripts: ['new-bad.com']
       };
       pi.updateConfig(newConfig);
       expect(pi['config']).toEqual({
         ...config,
-        ...newConfig,
-        analysisConfig: DEFAULT_ANALYSIS_CONFIG
+        ...newConfig
       });
     });
   });
@@ -151,30 +138,21 @@ describe('PageIntegrity', () => {
   describe('mergeConfig', () => {
     it('should merge configs correctly', () => {
       const defaults: PageIntegrityConfig = {
-        enabled: true,
-        debug: false,
         strictMode: false,
-        allowedDomains: ['default.com'],
-        blockedDomains: [],
-        allowedScripts: [],
-        blockedScripts: [],
-        allowDynamicInline: true,
-        allowedMutations: {
-          elementTypes: ['div', 'span', 'p'],
-          maxMutations: 100,
-          maxDepth: 3
-        },
+        whiteListedScripts: [],
+        blackListedScripts: [],
         analysisConfig: DEFAULT_ANALYSIS_CONFIG
       };
+
       const custom: Partial<PageIntegrityConfig> = {
-        allowedDomains: ['custom.com'],
-        blockedDomains: ['bad.com']
+        whiteListedScripts: ['custom.com'],
+        blackListedScripts: ['bad.com']
       };
-      const result = mergeConfig(defaults, custom as PageIntegrityConfig);
+
+      const result = mergeConfig(defaults, custom);
       expect(result).toEqual({
         ...defaults,
-        ...custom,
-        analysisConfig: DEFAULT_ANALYSIS_CONFIG
+        ...custom
       });
     });
   });
@@ -206,32 +184,6 @@ describe('PageIntegrity', () => {
       expect(pi['config'].strictMode).toBe(true);
     });
 
-    it('should handle debug mode configuration', () => {
-      const debugConfig: PageIntegrityConfig = {
-        ...config,
-        debug: true
-      };
-      const pi = new PageIntegrity(debugConfig);
-      expect(pi['config'].debug).toBe(true);
-    });
-
-    it('should handle allowed mutations configuration', () => {
-      const mutationsConfig: PageIntegrityConfig = {
-        ...config,
-        allowedMutations: {
-          elementTypes: ['div', 'span'],
-          maxMutations: 50,
-          maxDepth: 2
-        }
-      };
-      const pi = new PageIntegrity(mutationsConfig);
-      expect(pi['config'].allowedMutations).toEqual({
-        elementTypes: ['div', 'span'],
-        maxMutations: 50,
-        maxDepth: 2
-      });
-    });
-
     it('should handle analysis configuration', () => {
       const analysisConfig: PageIntegrityConfig = {
         ...config,
@@ -258,113 +210,24 @@ describe('PageIntegrity', () => {
   });
 
   describe('callbacks', () => {
-    let mutationEvents: BlockedEventInfo[];
-    let networkEvents: BlockedEventInfo[];
-    let storageEvents: BlockedEventInfo[];
-    let cookieEvents: BlockedEventInfo[];
-    let iframeEvents: BlockedEventInfo[];
-    let workerEvents: BlockedEventInfo[];
-    let websocketEvents: BlockedEventInfo[];
+    it('should call onBlocked when script is blocked', () => {
+      const pi = new PageIntegrity({
+        ...config,
+        onBlocked: (event) => blockedEvents.push(event)
+      });
 
-    beforeEach(() => {
-      mutationEvents = [];
-      networkEvents = [];
-      storageEvents = [];
-      cookieEvents = [];
-      iframeEvents = [];
-      workerEvents = [];
-      websocketEvents = [];
-
-      config.callbacks = {
-        onScriptBlocked: (event) => blockedEvents.push(event),
-        onMutationBlocked: (event) => mutationEvents.push(event),
-        onNetworkBlocked: (event) => networkEvents.push(event),
-        onStorageBlocked: (event) => storageEvents.push(event),
-        onCookieBlocked: (event) => cookieEvents.push(event),
-        onIframeBlocked: (event) => iframeEvents.push(event),
-        onWorkerBlocked: (event) => workerEvents.push(event),
-        onWebsocketBlocked: (event) => websocketEvents.push(event)
-      };
-    });
-
-    it('should call onMutationBlocked when mutation is blocked', () => {
-      const pi = new PageIntegrity(config);
       const event: BlockedEventInfo = {
-        type: 'mutation',
+        type: 'script' as BlockedEventType,
         timestamp: Date.now(),
-        context: {
-          elementType: 'div',
-          mutationType: 'insert'
+        url: 'https://blocked.com/script.js',
+        source: 'external',
+        details: {
+          reason: 'Blacklisted script'
         }
       };
-      pi['config'].callbacks?.onMutationBlocked?.(event);
-      expect(mutationEvents).toContainEqual(event);
-    });
 
-    it('should call onNetworkBlocked when network request is blocked', () => {
-      const pi = new PageIntegrity(config);
-      const event: BlockedEventInfo = {
-        type: 'network',
-        timestamp: Date.now(),
-        url: 'https://blocked.com/script.js'
-      };
-      pi['config'].callbacks?.onNetworkBlocked?.(event);
-      expect(networkEvents).toContainEqual(event);
-    });
-
-    it('should call onStorageBlocked when storage access is blocked', () => {
-      const pi = new PageIntegrity(config);
-      const event: BlockedEventInfo = {
-        type: 'storage',
-        timestamp: Date.now(),
-        details: { operation: 'setItem', key: 'sensitive' }
-      };
-      pi['config'].callbacks?.onStorageBlocked?.(event);
-      expect(storageEvents).toContainEqual(event);
-    });
-
-    it('should call onCookieBlocked when cookie access is blocked', () => {
-      const pi = new PageIntegrity(config);
-      const event: BlockedEventInfo = {
-        type: 'cookie',
-        timestamp: Date.now(),
-        details: { operation: 'set', name: 'tracking' }
-      };
-      pi['config'].callbacks?.onCookieBlocked?.(event);
-      expect(cookieEvents).toContainEqual(event);
-    });
-
-    it('should call onIframeBlocked when iframe is blocked', () => {
-      const pi = new PageIntegrity(config);
-      const event: BlockedEventInfo = {
-        type: 'iframe',
-        timestamp: Date.now(),
-        url: 'https://blocked.com/iframe.html'
-      };
-      pi['config'].callbacks?.onIframeBlocked?.(event);
-      expect(iframeEvents).toContainEqual(event);
-    });
-
-    it('should call onWorkerBlocked when worker is blocked', () => {
-      const pi = new PageIntegrity(config);
-      const event: BlockedEventInfo = {
-        type: 'worker',
-        timestamp: Date.now(),
-        url: 'https://blocked.com/worker.js'
-      };
-      pi['config'].callbacks?.onWorkerBlocked?.(event);
-      expect(workerEvents).toContainEqual(event);
-    });
-
-    it('should call onWebsocketBlocked when websocket is blocked', () => {
-      const pi = new PageIntegrity(config);
-      const event: BlockedEventInfo = {
-        type: 'websocket',
-        timestamp: Date.now(),
-        url: 'wss://blocked.com/socket'
-      };
-      pi['config'].callbacks?.onWebsocketBlocked?.(event);
-      expect(websocketEvents).toContainEqual(event);
+      pi['config'].onBlocked?.(event);
+      expect(blockedEvents).toContainEqual(event);
     });
   });
 }); 

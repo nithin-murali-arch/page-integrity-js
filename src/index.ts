@@ -51,12 +51,13 @@ export interface AllowedMutations {
   patterns: RegExp[];
 }
 
-export function mergeConfig(defaults: Partial<PageIntegrityConfig>, config: Partial<PageIntegrityConfig>): PageIntegrityConfig {
+export function mergeConfig(defaults: Partial<PageIntegrityConfig>, config?: Partial<PageIntegrityConfig>): PageIntegrityConfig {
   return {
-    strictMode: config.strictMode ?? defaults.strictMode ?? false,
-    whiteListedScripts: config.whiteListedScripts ?? defaults.whiteListedScripts ?? [],
-    blackListedScripts: config.blackListedScripts ?? defaults.blackListedScripts ?? [],
-    analysisConfig: config.analysisConfig ?? defaults.analysisConfig ?? DEFAULT_ANALYSIS_CONFIG
+    strictMode: config?.strictMode ?? defaults.strictMode ?? false,
+    whiteListedScripts: config?.whiteListedScripts ?? defaults.whiteListedScripts ?? [],
+    blackListedScripts: config?.blackListedScripts ?? defaults.blackListedScripts ?? [],
+    analysisConfig: config?.analysisConfig ?? defaults.analysisConfig ?? DEFAULT_ANALYSIS_CONFIG,
+    onBlocked: config?.onBlocked ?? defaults.onBlocked
   };
 }
 
@@ -92,8 +93,8 @@ export class PageIntegrity {
    * Create a new PageIntegrity instance.
    * @param config Configuration options for script and DOM mutation monitoring.
    */
-  constructor(config: PageIntegrityConfig) {
-    this.config = mergeConfig({}, config);
+  constructor(config?: PageIntegrityConfig) {
+    this.config = mergeConfig({}, config ?? {});
     this.cacheManager = new CacheManager();
     this.scriptBlocker = initScriptBlocker(this.config, this.cacheManager);
     this.scriptInterceptor = new ScriptInterceptor(this.scriptBlocker);

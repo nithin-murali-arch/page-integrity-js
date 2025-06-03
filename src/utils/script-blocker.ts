@@ -48,9 +48,17 @@ export class ScriptBlocker {
     // Check if script is blacklisted
     const isBlacklisted = this.config.blackListedScripts?.some(pattern => url.includes(pattern));
     if (isBlacklisted) {
-      this.blockedScripts.set(url, {
+      const blockedInfo = {
         url,
         reason: 'Blacklisted script'
+      };
+      this.blockedScripts.set(url, blockedInfo);
+      this.config.onBlocked?.({
+        type: 'script',
+        timestamp: Date.now(),
+        url,
+        source: 'external',
+        details: blockedInfo
       });
       return { blocked: true, reason: 'Blacklisted script' };
     }
@@ -68,16 +76,42 @@ export class ScriptBlocker {
     // Check cache first
     const cached = await checkCachedResponse(this.cacheManager, url, content);
     if (cached.blocked) {
-      this.blockedScripts.set(url, {
+      const blockedInfo = {
         url,
         reason: cached.reason || 'Cached block',
         analysis: cached.analysis
+      };
+      this.blockedScripts.set(url, blockedInfo);
+      this.config.onBlocked?.({
+        type: 'script',
+        timestamp: Date.now(),
+        url,
+        source: 'external',
+        details: blockedInfo
       });
       return cached;
     }
 
     // Analyze script for monitoring
     const analysis = analyzeScriptContent(content);
+    const config = this.config.analysisConfig;
+    if (analysis.score >= config.minScore || analysis.threats.length >= config.maxThreats) {
+      const blockedInfo = {
+        url,
+        reason: 'Malicious script detected',
+        analysis
+      };
+      this.blockedScripts.set(url, blockedInfo);
+      this.config.onBlocked?.({
+        type: 'script',
+        timestamp: Date.now(),
+        url,
+        source: 'external',
+        details: blockedInfo
+      });
+      return { blocked: true, reason: 'Malicious script detected', analysis };
+    }
+
     this.blockedScripts.set(url, {
       url,
       reason: 'Script analyzed',
