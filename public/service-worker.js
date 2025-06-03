@@ -1,38 +1,6 @@
 (function () {
     'use strict';
 
-    /******************************************************************************
-    Copyright (c) Microsoft Corporation.
-
-    Permission to use, copy, modify, and/or distribute this software for any
-    purpose with or without fee is hereby granted.
-
-    THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
-    REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
-    AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
-    INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
-    LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
-    OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
-    PERFORMANCE OF THIS SOFTWARE.
-    ***************************************************************************** */
-    /* global Reflect, Promise, SuppressedError, Symbol, Iterator */
-
-
-    function __awaiter(thisArg, _arguments, P, generator) {
-        function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-        return new (P || (P = Promise))(function (resolve, reject) {
-            function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-            function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-            function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-            step((generator = generator.apply(thisArg, _arguments || [])).next());
-        });
-    }
-
-    typeof SuppressedError === "function" ? SuppressedError : function (error, suppressed, message) {
-        var e = new Error(message);
-        return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
-    };
-
     function createHash(text) {
         const encoder = new TextEncoder();
         const data = encoder.encode(text);
@@ -202,28 +170,25 @@
     }
 
     function shouldAnalyzeScript(request, response) {
-        var _a;
         const url = request.url.toLowerCase();
         return (url.endsWith('.js') ||
-            ((_a = response.headers.get('content-type')) === null || _a === void 0 ? void 0 : _a.includes('javascript')) ||
+            response.headers.get('content-type')?.includes('javascript') ||
             false);
     }
-    function analyzeAndCacheScript(text, url, cacheManager) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const hash = createHash(text);
-            const analysis = analyzeScript(text);
-            yield cacheManager.cacheResponse(hash, url, analysis);
-            return { hash, analysis };
-        });
+    async function analyzeAndCacheScript(text, url, cacheManager) {
+        const hash = createHash(text);
+        const analysis = analyzeScript(text);
+        await cacheManager.cacheResponse(hash, url, analysis);
+        return { hash, analysis };
     }
-    function cacheNonScript(text, url, cacheManager) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const hash = createHash(text);
-            yield cacheManager.cacheResponse(hash, url);
-            return { hash };
-        });
+    async function cacheNonScript(text, url, cacheManager) {
+        const hash = createHash(text);
+        await cacheManager.cacheResponse(hash, url);
+        return { hash };
     }
     class RequestHandler {
+        cacheManager;
+        static handledRequests = new WeakMap();
         constructor(cacheManager) {
             this.cacheManager = cacheManager;
         }
@@ -233,110 +198,99 @@
         cleanupRequest(request) {
             RequestHandler.handledRequests.delete(request);
         }
-        handleFetch(request) {
-            return __awaiter(this, void 0, void 0, function* () {
-                // Skip if this request is already being handled by the service worker
-                if (RequestHandler.handledRequests.get(request)) {
-                    try {
-                        return yield fetch(request);
-                    }
-                    catch (error) {
-                        console.error(`Failed to load resource: ${request.url}`, error);
-                        throw error;
-                    }
-                }
-                // Mark this request as being handled
-                RequestHandler.handledRequests.set(request, true);
+        async handleFetch(request) {
+            // Skip if this request is already being handled by the service worker
+            if (RequestHandler.handledRequests.get(request)) {
                 try {
-                    const response = yield fetch(request);
-                    const clonedResponse = response.clone();
-                    const text = yield clonedResponse.text();
-                    const url = request.url;
-                    try {
-                        if (shouldAnalyzeScript(request, response)) {
-                            yield analyzeAndCacheScript(text, url, this.cacheManager);
-                        }
-                        else {
-                            yield cacheNonScript(text, url, this.cacheManager);
-                        }
-                    }
-                    catch (error) {
-                        console.error(`Error processing response for ${url}:`, error);
-                    }
-                    return response;
+                    return await fetch(request);
                 }
                 catch (error) {
                     console.error(`Failed to load resource: ${request.url}`, error);
                     throw error;
                 }
-                finally {
-                    this.cleanupRequest(request);
-                }
-            });
-        }
-        handleXhrRequest(url, method, body) {
-            return __awaiter(this, void 0, void 0, function* () {
+            }
+            // Mark this request as being handled
+            RequestHandler.handledRequests.set(request, true);
+            try {
+                const response = await fetch(request);
+                const clonedResponse = response.clone();
+                const text = await clonedResponse.text();
+                const url = request.url;
                 try {
-                    const response = yield fetch(url, { method, body });
-                    const text = yield response.text();
-                    return analyzeAndCacheScript(text, url, this.cacheManager);
+                    if (shouldAnalyzeScript(request, response)) {
+                        await analyzeAndCacheScript(text, url, this.cacheManager);
+                    }
+                    else {
+                        await cacheNonScript(text, url, this.cacheManager);
+                    }
                 }
                 catch (error) {
-                    console.error(`Failed to load XHR resource: ${url}`, error);
-                    throw error;
+                    console.error(`Error processing response for ${url}:`, error);
                 }
-            });
+                return response;
+            }
+            catch (error) {
+                console.error(`Failed to load resource: ${request.url}`, error);
+                throw error;
+            }
+            finally {
+                this.cleanupRequest(request);
+            }
         }
-        handleScriptRequest(url) {
-            return __awaiter(this, void 0, void 0, function* () {
-                try {
-                    const response = yield fetch(url);
-                    const text = yield response.text();
-                    return analyzeAndCacheScript(text, url, this.cacheManager);
-                }
-                catch (error) {
-                    console.error(`Failed to load script resource: ${url}`, error);
-                    throw error;
-                }
-            });
+        async handleXhrRequest(url, method, body) {
+            try {
+                const response = await fetch(url, { method, body });
+                const text = await response.text();
+                return analyzeAndCacheScript(text, url, this.cacheManager);
+            }
+            catch (error) {
+                console.error(`Failed to load XHR resource: ${url}`, error);
+                throw error;
+            }
+        }
+        async handleScriptRequest(url) {
+            try {
+                const response = await fetch(url);
+                const text = await response.text();
+                return analyzeAndCacheScript(text, url, this.cacheManager);
+            }
+            catch (error) {
+                console.error(`Failed to load script resource: ${url}`, error);
+                throw error;
+            }
         }
     }
-    RequestHandler.handledRequests = new WeakMap();
 
     const CACHE_NAME = 'response-cache';
     const MAX_CACHE_SIZE = 2500;
     class CacheManager {
+        cacheName;
+        maxSize;
         constructor(cacheName = CACHE_NAME, maxSize = MAX_CACHE_SIZE) {
             this.cacheName = cacheName;
             this.maxSize = maxSize;
         }
-        cacheResponse(hash, url, analysis) {
-            return __awaiter(this, void 0, void 0, function* () {
-                const cache = yield caches.open(this.cacheName);
-                const responseData = analysis ? { url, analysis } : { url };
-                yield cache.put(hash, new Response(JSON.stringify(responseData)));
-                // Implement LRU by limiting cache size
-                const keys = yield cache.keys();
-                if (keys.length > this.maxSize) {
-                    yield cache.delete(keys[0]);
-                }
-            });
+        async cacheResponse(hash, url, analysis) {
+            const cache = await caches.open(this.cacheName);
+            const responseData = analysis ? { url, analysis } : { url };
+            await cache.put(hash, new Response(JSON.stringify(responseData)));
+            // Implement LRU by limiting cache size
+            const keys = await cache.keys();
+            if (keys.length > this.maxSize) {
+                await cache.delete(keys[0]);
+            }
         }
-        getCachedResponse(hash) {
-            return __awaiter(this, void 0, void 0, function* () {
-                const cache = yield caches.open(this.cacheName);
-                const response = yield cache.match(hash);
-                if (response) {
-                    const text = yield response.text();
-                    return JSON.parse(text);
-                }
-                return null;
-            });
+        async getCachedResponse(hash) {
+            const cache = await caches.open(this.cacheName);
+            const response = await cache.match(hash);
+            if (response) {
+                const text = await response.text();
+                return JSON.parse(text);
+            }
+            return null;
         }
-        clearCache() {
-            return __awaiter(this, void 0, void 0, function* () {
-                yield caches.delete(this.cacheName);
-            });
+        async clearCache() {
+            await caches.delete(this.cacheName);
         }
     }
 
@@ -351,16 +305,15 @@
         if (event.data.type === 'getUrl') {
             const hash = event.data.hash;
             cacheManager.getCachedResponse(hash).then(data => {
-                var _a, _b;
                 if (data) {
-                    (_a = event.source) === null || _a === void 0 ? void 0 : _a.postMessage({
+                    event.source?.postMessage({
                         type: 'url',
                         url: data.url,
                         analysis: data.analysis
                     });
                 }
                 else {
-                    (_b = event.source) === null || _b === void 0 ? void 0 : _b.postMessage({ type: 'url', url: null });
+                    event.source?.postMessage({ type: 'url', url: null });
                 }
             });
         }
@@ -371,17 +324,15 @@
             const { url, method, body } = event.data;
             requestHandler.handleXhrRequest(url, method, body)
                 .then(({ hash, analysis }) => {
-                var _a;
-                (_a = event.source) === null || _a === void 0 ? void 0 : _a.postMessage({
+                event.source?.postMessage({
                     type: 'xhrResponse',
                     hash,
                     analysis
                 });
             })
                 .catch(error => {
-                var _a;
                 console.error('XHR error:', error);
-                (_a = event.source) === null || _a === void 0 ? void 0 : _a.postMessage({ type: 'xhrError', error: error.message });
+                event.source?.postMessage({ type: 'xhrError', error: error.message });
             });
         }
     });
@@ -391,17 +342,15 @@
             const { url } = event.data;
             requestHandler.handleScriptRequest(url)
                 .then(({ hash, analysis }) => {
-                var _a;
-                (_a = event.source) === null || _a === void 0 ? void 0 : _a.postMessage({
+                event.source?.postMessage({
                     type: 'scriptResponse',
                     hash,
                     analysis
                 });
             })
                 .catch(error => {
-                var _a;
                 console.error('Script error:', error);
-                (_a = event.source) === null || _a === void 0 ? void 0 : _a.postMessage({ type: 'scriptError', error: error.message });
+                event.source?.postMessage({ type: 'scriptError', error: error.message });
             });
         }
     });
