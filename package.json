@@ -44,8 +44,16 @@
     "security-audit",
     "xss-prevention"
   ],
-  "author": "",
+  "author": "Nithin Murali <nithintecharch@gmail.com>",
   "license": "MIT",
+  "homepage": "https://github.com/nithin-murali-arch/page-integrity-js#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nithin-murali-arch/page-integrity-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nithin-murali-arch/page-integrity-js/issues"
+  },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^25.0.7",
     "@rollup/plugin-node-resolve": "^15.2.3",
