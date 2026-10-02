@@ -1,4 +1,4 @@
-import { CacheManager, CacheEntry } from '../src/utils/cache-manager';
+import { CacheManager } from '../src/utils/cache-manager';
 import { ScriptAnalysis } from '../src/utils/script-analyzer';
 
 // Mock the global caches API

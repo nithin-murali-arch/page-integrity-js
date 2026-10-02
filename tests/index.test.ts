@@ -105,7 +105,7 @@ describe('PageIntegrity', () => {
 
   describe('script blocking', () => {
     it('should allow scripts from allowed domains', async () => {
-      const pi = new PageIntegrity(config);
+      new PageIntegrity(config);
       const script = document.createElement('script');
       script.src = 'https://good.com/safe.js';
 
@@ -120,7 +120,7 @@ describe('PageIntegrity', () => {
     });
 
     it('should handle unknown domains', async () => {
-      const pi = new PageIntegrity(config);
+      new PageIntegrity(config);
       const script = document.createElement('script');
       script.src = 'https://neutral.com/neutral.js';
 

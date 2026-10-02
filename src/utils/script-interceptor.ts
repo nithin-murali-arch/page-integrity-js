@@ -1,12 +1,6 @@
 import { ScriptBlocker } from './script-blocker';
 import { TrustedScript, TrustedURL } from '../types';
 
-interface BlockResult {
-  blocked: boolean;
-  reason?: string;
-  analysis?: any;
-}
-
 /**
  * Intercepts global methods that can execute scripts.
  * @param scriptBlocker The script blocker instance

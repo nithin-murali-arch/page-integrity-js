@@ -27,7 +27,6 @@ describe('Script Blocker Helpers', () => {
     it('should return blocked if script is cached and blocked', async () => {
       const url = 'https://example.com/script.js';
       const content = 'console.log("test")';
-      const hash = 'test-hash';
       (mockCacheManager.getCachedResponse as jest.Mock).mockResolvedValue({
         blocked: true,
         reason: 'test',
@@ -43,7 +42,6 @@ describe('Script Blocker Helpers', () => {
     it('should return not blocked if script is cached but not blocked', async () => {
       const url = 'https://example.com/script.js';
       const content = 'console.log("test")';
-      const hash = 'test-hash';
       (mockCacheManager.getCachedResponse as jest.Mock).mockResolvedValue({
         blocked: false,
         analysis: { score: 1 }
@@ -57,7 +55,6 @@ describe('Script Blocker Helpers', () => {
     it('should return not blocked if script is not cached', async () => {
       const url = 'https://example.com/script.js';
       const content = 'console.log("test")';
-      const hash = 'test-hash';
       (mockCacheManager.getCachedResponse as jest.Mock).mockResolvedValue(null);
 
       const result = await checkCachedResponse(mockCacheManager, url, content);

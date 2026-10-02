@@ -9,13 +9,10 @@
 import { CacheManager } from './utils/cache-manager';
 import { ScriptBlocker } from './utils/script-blocker';
 import { ScriptInterceptor } from './utils/script-interceptor';
-import { 
-  PageIntegrityConfig, 
-  ScriptInfo, 
-  BlockedEventInfo,
+import {
+  PageIntegrityConfig,
   MutationType,
-  ElementType,
-  ScriptSource
+  ElementType
 } from './types/index';
 import { DEFAULT_ANALYSIS_CONFIG } from './utils/script-analyzer';
 import { startScriptBlocking, stopScriptBlocking } from './script-blocking';
