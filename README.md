@@ -1,15 +1,26 @@
 # Page Integrity JS
 
+[![CI](https://github.com/nithin-murali-arch/page-integrity-js/actions/workflows/test.yml/badge.svg)](https://github.com/nithin-murali-arch/page-integrity-js/actions/workflows/test.yml)
 [![npm version](https://img.shields.io/npm/v/page-integrity-js.svg)](https://www.npmjs.com/package/page-integrity-js)
-[![npm downloads](https://img.shields.io/npm/dm/page-integrity-js.svg)](https://www.npmjs.com/package/page-integrity-js)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
-[![Node.js Version](https://img.shields.io/badge/Node.js-%3E%3D16.0.0-green.svg)](https://nodejs.org/)
-[![Security](https://img.shields.io/badge/Security-PCI%20DSS%20Compliant-red.svg)](https://www.pcisecuritystandards.org/)
-[![Bundle Size](https://img.shields.io/bundlephobia/min/page-integrity-js)](https://bundlephobia.com/package/page-integrity-js)
-[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](https://github.com/nithin-murali-arch/page-integrity-js/actions)
 
-A powerful JavaScript library for ensuring webpage content integrity by monitoring and controlling script execution. Essential for PCI DSS compliance and security audits.
+Page Integrity JS blocks untrusted scripts and monitors mutations for PCI DSS compliance.
+
+## Installation
+
+```bash
+npm install page-integrity-js
+```
+
+## Usage
+
+```javascript
+import { PageIntegrity } from 'page-integrity-js';
+
+new PageIntegrity({
+  whiteListedScripts: ['trusted.com'],
+  blackListedScripts: ['evil.com']
+});
+```
 
 ## Features
 

@@ -1,7 +1,7 @@
 {
   "name": "page-integrity-js",
   "version": "1.1.6",
-  "description": "A library for monitoring and controlling DOM mutations and script execution, essential for PCI DSS compliance and security audits",
+  "description": "Stop rogue scripts and DOM tampering. Monitor mutations and block untrusted scripts for PCI DSS compliance.",
   "engines": {
     "node": ">=16.0.0"
   },
@@ -41,9 +41,7 @@
     "blocking",
     "pci-dss",
     "compliance",
-    "audit",
-    "security-audit",
-    "xss-prevention"
+    "audit"
   ],
   "author": "Nithin Murali <nithintecharch@gmail.com>",
   "license": "MIT",
