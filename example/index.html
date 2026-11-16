@@ -5,36 +5,39 @@
   <title>Page Integrity JS Example</title>
   <script src="../dist/page-integrity.js"></script>
   <script>
-    // Configure PageIntegrity
-    window.pageIntegrityInstance = new window.PageIntegrity({
-      whitelistedHosts: ['trusted.com'],
-      blacklistedHosts: ['evil.com'],
-      onBlocked: function(event) {
-        const log = document.getElementById('log');
-        log.textContent += `Blocked: ${JSON.stringify(event)}\n`;
+    window.pageIntegrityInstance = new PageIntegrityLib.PageIntegrity({
+      strictMode: false,
+      whiteListedScripts: ['trusted.example'],
+      blackListedScripts: ['evil.example'],
+      onBlocked: function (info) {
+        log('onBlocked: ' + info.details.reason + ' (' + info.url + ')');
       }
     });
   </script>
 </head>
 <body>
   <h1>Page Integrity JS Example</h1>
-  <p>This page demonstrates script blocking and whitelisting.</p>
+  <p>Serve the repository root (for example <code>npx http-server .</code>), run <code>npm run build</code> first, and open <code>/example/index.html</code>.</p>
+  <button onclick="tryFetch('https://evil.example/bad.js')">fetch a block-listed .js URL</button>
+  <button onclick="tryFetch('https://trusted.example/good.js')">fetch an allow-listed .js URL</button>
+  <button onclick="tryEval(&quot;eval('1')&quot;)">eval code that matches a threat pattern</button>
+  <button onclick="tryEval('1 + 1')">eval harmless code</button>
   <pre id="log" style="background:#222;color:#0f0;padding:1em;"></pre>
-  <button onclick="addScript('https://evil.com/bad.js')">Add Blacklisted Script</button>
-  <button onclick="addScript('https://trusted.com/good.js')">Add Whitelisted Script</button>
-  <button onclick="addScript('https://unknown.com/neutral.js')">Add Unknown Script</button>
-  <button onclick="addInlineScript()">Add Inline Script</button>
   <script>
-    function addScript(src) {
-      const s = document.createElement('script');
-      s.src = src;
-      document.body.appendChild(s);
+    function log(line) {
+      document.getElementById('log').textContent += line + '\n';
     }
-    function addInlineScript() {
-      const s = document.createElement('script');
-      s.textContent = 'document.getElementById("log").textContent += "Inline script ran!\\n";';
-      document.body.appendChild(s);
+    function tryFetch(url) {
+      fetch(url).then(
+        function () { log('fetch allowed: ' + url); },
+        function (error) { log('fetch rejected: ' + error.message); }
+      );
+    }
+    function tryEval(code) {
+      Promise.resolve(window.eval(code)).then(function (result) {
+        log(result === undefined ? 'eval returned undefined (blocked)' : 'eval returned ' + result);
+      });
     }
   </script>
 </body>
-</html> 
+</html>
