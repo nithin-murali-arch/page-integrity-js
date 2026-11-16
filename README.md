@@ -36,6 +36,19 @@ The TypeScript type `PageIntegrityConfig` requires `strictMode`, `whiteListedScr
 
 Each instance also sets `window.PageIntegrity` to the class.
 
+### Use without a bundler
+
+The package also ships a browser bundle at `dist/page-integrity.js`. It exposes the library as the global `PageIntegrityLib`.
+
+```html
+<script src="node_modules/page-integrity-js/dist/page-integrity.js"></script>
+<script>
+	new PageIntegrityLib.PageIntegrity({ blackListedScripts: ['evil.com'] });
+</script>
+```
+
+[`example/index.html`](example/index.html) shows the bundle with a block list, an allow list, and `onBlocked`.
+
 ## How a script is judged
 
 For each script the library sees, it applies these checks in order and stops at the first match.
