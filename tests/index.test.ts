@@ -1,6 +1,5 @@
 import { PageIntegrity, mergeConfig, exposeGlobally } from '../src/index';
 import { ScriptBlocker } from '../src/utils/script-blocker';
-import { CacheManager } from '../src/utils/cache-manager';
 import { PageIntegrityConfig, BlockedEventInfo, BlockedEventType } from '../src/types';
 import { DEFAULT_ANALYSIS_CONFIG } from '../src/utils/script-analyzer';
 
@@ -14,21 +13,12 @@ jest.mock('../src/utils/script-interceptor', () => ({
 
 jest.mock('../src/utils/script-blocker', () => ({
   ScriptBlocker: jest.fn().mockImplementation(() => ({
-    shouldBlockScript: jest.fn().mockResolvedValue({ blocked: false })
-  }))
-}));
-
-jest.mock('../src/utils/cache-manager', () => ({
-  CacheManager: jest.fn().mockImplementation(() => ({
-    getCachedResponse: jest.fn(),
-    clearCache: jest.fn(),
-    cacheResponse: jest.fn()
+    shouldBlockScript: jest.fn().mockReturnValue({ blocked: false })
   }))
 }));
 
 describe('PageIntegrity', () => {
   let mockScriptBlocker: jest.Mocked<ScriptBlocker>;
-  let mockCacheManager: jest.Mocked<CacheManager>;
   let blockedEvents: BlockedEventInfo[];
   let config: PageIntegrityConfig;
 
@@ -50,14 +40,7 @@ describe('PageIntegrity', () => {
       clearBlockedScripts: jest.fn()
     } as any;
 
-    mockCacheManager = {
-      getCachedResponse: jest.fn(),
-      clearCache: jest.fn(),
-      cacheResponse: jest.fn()
-    } as any;
-
     (ScriptBlocker as unknown as jest.Mock).mockImplementation(() => mockScriptBlocker);
-    (CacheManager as unknown as jest.Mock).mockImplementation(() => mockCacheManager);
 
     // Clean up global for each test
     (window as any).PageIntegrity = undefined;
@@ -109,7 +92,7 @@ describe('PageIntegrity', () => {
       const script = document.createElement('script');
       script.src = 'https://good.com/safe.js';
 
-      mockScriptBlocker.shouldBlockScript.mockResolvedValue({
+      mockScriptBlocker.shouldBlockScript.mockReturnValue({
         blocked: false
       });
 
@@ -124,7 +107,7 @@ describe('PageIntegrity', () => {
       const script = document.createElement('script');
       script.src = 'https://neutral.com/neutral.js';
 
-      mockScriptBlocker.shouldBlockScript.mockResolvedValue({
+      mockScriptBlocker.shouldBlockScript.mockReturnValue({
         blocked: false
       });
 

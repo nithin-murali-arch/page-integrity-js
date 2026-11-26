@@ -1,6 +1,6 @@
 {
   "name": "page-integrity-js",
-  "version": "1.1.6",
+  "version": "4.0.0",
   "description": "Stop rogue scripts and DOM tampering. Monitor mutations and block untrusted scripts for PCI DSS compliance.",
   "engines": {
     "node": ">=16.0.0"

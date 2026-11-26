@@ -55,24 +55,28 @@ For each script the library sees, it applies these checks in order and stops at 
 
 1. **Block list.** If the URL contains any `blackListedScripts` entry, the script is blocked.
 2. **Allow list.** If the URL contains any `whiteListedScripts` entry, the script is allowed. It skips analysis.
-3. **Cache.** If the content hash is in the response cache with a malicious analysis, the script is blocked.
-4. **Analysis.** The library scores the content. It blocks the script if the score reaches `minScore` or the threat count reaches `maxThreats`.
+3. **Analysis.** The library scores the content. It blocks the script if the score reaches `minScore` or the threat count reaches `maxThreats`.
+
+The decision is synchronous, so every patched global keeps its native return value.
 
 List entries match as substrings of the URL, so `trusted.com` and `https://trusted.com/app.js` both work. The block list wins over the allow list.
 
 ## What it intercepts
 
-`new PageIntegrity()` replaces these globals with checking wrappers.
+`new PageIntegrity()` replaces these globals and DOM methods with checking wrappers.
 
-| Global | When it is checked |
-|--------|--------------------|
-| `window.eval` | Always. The code string is analyzed. |
-| `window.Function` | When the created function runs. |
-| `window.setTimeout`, `window.setInterval` | When the handler is a string or an object. |
-| `window.fetch` | When the URL ends in `.js`. |
-| `XMLHttpRequest.prototype.open` | When the URL ends in `.js`. |
+| Global | When it is checked | When blocked |
+|--------|--------------------|--------------|
+| `window.eval` | Always. The code string is analyzed. | Returns `undefined`. |
+| `window.Function` | When the function is created. | Throws `EvalError`. |
+| `window.setTimeout`, `window.setInterval` | When the handler is a string or an object. | Returns `0`. No timer is set. |
+| `window.fetch` | When the URL ends in `.js`. | Returns a rejected Promise. |
+| `XMLHttpRequest.prototype.open` | When the URL ends in `.js`. | Throws. |
+| `appendChild`, `insertBefore`, `replaceChild`, `append`, `prepend`, `before`, `after`, `replaceWith` | When the inserted node is a `<script>` or contains one. | Sets the script's `type` to `javascript/blocked`, so the browser neither fetches nor runs it. |
 
-For `eval`, `Function`, `setTimeout`, and `setInterval`, the "URL" that the lists match against is the global's name, for example `eval`.
+For `eval`, `Function`, `setTimeout`, and `setInterval`, the "URL" that the lists match against is the global's name, for example `eval`. For an inline `<script>` it is `inline`. An external `<script src>` is matched by its URL only. Its content is not fetched for analysis.
+
+Script elements whose `type` is not JavaScript, such as `application/ld+json`, are left alone.
 
 ## Configuration
 
@@ -114,12 +118,12 @@ If you pass `analysisConfig`, it replaces the defaults as a whole. Provide every
 
 | Method | Description |
 |--------|-------------|
-| `updateConfig(partial)` | Merges `partial` into the current config. See the known issues below. |
-| `destroy()` | Stops the interceptor. See the known issues below. |
+| `updateConfig(partial)` | Merges `partial` into the current config. It removes the current wrappers before it installs new ones. |
+| `destroy()` | Restores every patched global and DOM method. |
 
 ## Service worker
 
-The package ships `public/service-worker.js`. It fetches scripts, analyzes them, and stores each analysis in Cache Storage under the content hash. The page-side blocker reads that cache in step 3 above. The service worker never blocks a request itself.
+The package ships `public/service-worker.js`. It fetches scripts, analyzes them, and stores each analysis in Cache Storage under the content hash. It answers `getUrl`, `xhr`, and `script` messages from the page with those analyses. The page-side blocker does not read this cache, and the service worker never blocks a request itself.
 
 The library does not register the worker. Serve the file from your own origin and register it:
 
@@ -127,15 +131,16 @@ The library does not register the worker. Serve the file from your own origin an
 navigator.serviceWorker.register('/service-worker.js');
 ```
 
-## Known issues
+## Known limitations
 
-These come from reading the source. Treat them as open bugs, not design.
+- **Scripts already in the HTML are not checked.** Only scripts inserted after `new PageIntegrity()` runs go through the DOM wrappers. Load the library before any script you want it to judge.
+- **`innerHTML` and `document.write` are not wrapped.** Scripts inserted through `innerHTML` never run in browsers. Scripts written with `document.write` are not checked.
+- **`eval` becomes indirect.** The wrapper calls the native `eval` from its own scope, so code that relies on direct `eval` seeing local variables breaks.
+- **`strictMode` has no effect yet.**
 
-- **Script elements are not intercepted.** A `<script src>` or an inline `<script>` added to the DOM is not checked. `interceptScriptElement` exists in `src/utils/script-interceptor.ts` but nothing calls it.
-- **Patched globals are async.** `eval`, `setTimeout`, `setInterval`, `fetch`, and `XMLHttpRequest.prototype.open` become `async` functions. `eval` and `setTimeout` return a Promise, so `clearTimeout(setTimeout(...))` and the result of `eval('1 + 1')` no longer work as in the browser.
-- **`destroy()` does not restore the globals.** It clears a flag only.
-- **`updateConfig()` stacks wrappers.** It installs a new set of wrappers on top of the old ones, and the old wrappers keep their old config.
-- **`Function` is checked after the fact.** The created function still runs when the check says to block it.
+## Upgrading from 3.x
+
+4.0.0 is built from this repository. The 3.x line on npm used a different configuration (`allowedHosts`, `blockedHosts`, and related options). Move to `whiteListedScripts` and `blackListedScripts`. `ScriptBlocker.shouldBlockScript` now returns its result directly instead of a Promise, and `initScriptBlocker` takes only the config.
 
 ## Contributing
 

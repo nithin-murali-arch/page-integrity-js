@@ -1,160 +1,185 @@
-import { ScriptInterceptor, interceptScriptElement, interceptGlobalMethods } from '../src/utils/script-interceptor';
+import { ScriptInterceptor } from '../src/utils/script-interceptor';
 import { ScriptBlocker } from '../src/utils/script-blocker';
-import { CacheManager } from '../src/utils/cache-manager';
-import { PageIntegrityConfig } from '../src/types';
+import { BlockedEventInfo, PageIntegrityConfig } from '../src/types';
 
-describe('Script Interceptor', () => {
-  let mockScriptBlocker: jest.Mocked<ScriptBlocker>;
-  let mockCacheManager: jest.Mocked<CacheManager>;
-  let config: PageIntegrityConfig;
+const MALICIOUS = 'document.domain = "*"; window.__ran = "malicious";';
+
+describe('ScriptInterceptor', () => {
+  let blocked: BlockedEventInfo[];
+  let interceptor: ScriptInterceptor;
+
+  const start = (overrides: Partial<PageIntegrityConfig> = {}): void => {
+    interceptor = new ScriptInterceptor(new ScriptBlocker({
+      strictMode: false,
+      whiteListedScripts: ['trusted.example'],
+      blackListedScripts: ['evil.example'],
+      onBlocked: event => blocked.push(event),
+      ...overrides
+    }));
+    interceptor.start();
+  };
+
+  const appendScript = (setup: (script: HTMLScriptElement) => void): HTMLScriptElement => {
+    const script = document.createElement('script');
+    setup(script);
+    document.head.appendChild(script);
+    return script;
+  };
 
   beforeEach(() => {
-    mockCacheManager = {
-      getCachedResponse: jest.fn(),
-      setCachedResponse: jest.fn(),
-      clearCache: jest.fn()
-    } as any;
-
-    config = {
-      strictMode: false,
-      whiteListedScripts: [],
-      blackListedScripts: []
-    };
-
-    mockScriptBlocker = new ScriptBlocker(mockCacheManager, config) as jest.Mocked<ScriptBlocker>;
-    mockScriptBlocker.shouldBlockScript = jest.fn().mockResolvedValue({ blocked: false });
+    blocked = [];
+    delete (window as any).__ran;
+    document.head.innerHTML = '';
+    document.body.innerHTML = '';
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+  afterEach(() => interceptor.stop());
 
-  describe('ScriptInterceptor class', () => {
-    let interceptor: ScriptInterceptor;
-
-    beforeEach(() => {
-      interceptor = new ScriptInterceptor(mockScriptBlocker);
+  describe('eval', () => {
+    it('returns the evaluated value synchronously', () => {
+      start();
+      expect(window.eval('1 + 1')).toBe(2);
     });
 
-    it('should create instance', () => {
-      expect(interceptor).toBeInstanceOf(ScriptInterceptor);
-    });
-
-    it('should create instance using static method', () => {
-      const instance = ScriptInterceptor.createInstance(mockScriptBlocker);
-      expect(instance).toBeInstanceOf(ScriptInterceptor);
-    });
-
-    it('should start interception', () => {
-      interceptor.start();
-      expect(mockScriptBlocker.shouldBlockScript).not.toHaveBeenCalled();
-    });
-
-    it('should not start if already started', () => {
-      interceptor.start();
-      interceptor.start();
-      expect(mockScriptBlocker.shouldBlockScript).not.toHaveBeenCalled();
-    });
-
-    it('should stop interception', () => {
-      interceptor.start();
-      interceptor.stop();
-      expect(mockScriptBlocker.shouldBlockScript).not.toHaveBeenCalled();
+    it('returns undefined for malicious code without running it', () => {
+      start();
+      expect(window.eval(MALICIOUS)).toBeUndefined();
+      expect((window as any).__ran).toBeUndefined();
+      expect(blocked.map(event => event.url)).toEqual(['eval']);
     });
   });
 
-  describe('interceptScriptElement', () => {
-    it('should handle script with src', async () => {
-      const script = document.createElement('script');
-      script.src = 'https://example.com/script.js';
-      await interceptScriptElement(script, mockScriptBlocker);
-      expect(mockScriptBlocker.shouldBlockScript).toHaveBeenCalledWith('https://example.com/script.js', '');
+  describe('Function', () => {
+    it('builds working functions that are still instances of Function', () => {
+      start();
+      const add = new window.Function('a', 'b', 'return a + b');
+      expect(add(2, 3)).toBe(5);
+      expect((() => 0) instanceof window.Function).toBe(true);
     });
 
-    it('should handle script with textContent', async () => {
-      const script = document.createElement('script');
-      script.textContent = 'console.log("test");';
-      await interceptScriptElement(script, mockScriptBlocker);
-      expect(mockScriptBlocker.shouldBlockScript).toHaveBeenCalledWith('inline', 'console.log("test");');
-    });
-
-    it('should handle null scriptBlocker', async () => {
-      const script = document.createElement('script');
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-      await interceptScriptElement(script, null as unknown as ScriptBlocker);
-      expect(consoleSpy).toHaveBeenCalledWith('ScriptBlocker is not initialized');
-      consoleSpy.mockRestore();
-    });
-
-    it('should remove script if blocked', async () => {
-      mockScriptBlocker.shouldBlockScript.mockResolvedValueOnce({ blocked: true, reason: 'Blocked' });
-      const script = document.createElement('script');
-      script.src = 'https://example.com/script.js';
-      document.body.appendChild(script);
-      await interceptScriptElement(script, mockScriptBlocker);
-      expect(script.parentNode).toBeNull();
+    it('throws at creation for malicious bodies', () => {
+      start();
+      expect(() => new window.Function(MALICIOUS)).toThrow(EvalError);
+      expect(blocked.map(event => event.url)).toEqual(['Function']);
     });
   });
 
-  describe('interceptGlobalMethods', () => {
-    it('should intercept eval', async () => {
-      interceptGlobalMethods(mockScriptBlocker);
-      await window.eval('console.log("test");');
-      expect(mockScriptBlocker.shouldBlockScript).toHaveBeenCalledWith('eval', 'console.log("test");');
+  describe('timers', () => {
+    it('returns a timer id that clearTimeout cancels', async () => {
+      start();
+      let ran = false;
+      const id = window.setTimeout(() => { ran = true; }, 0);
+      expect(typeof id).toBe('number');
+      window.clearTimeout(id);
+      await new Promise(resolve => window.setTimeout(resolve, 10));
+      expect(ran).toBe(false);
     });
 
-    it('should block eval when script is blocked', async () => {
-      mockScriptBlocker.shouldBlockScript.mockResolvedValueOnce({ blocked: true, reason: 'Blocked' });
-      interceptGlobalMethods(mockScriptBlocker);
-      const result = await window.eval('console.log("test");');
-      expect(result).toBeUndefined();
+    it.each(['setTimeout', 'setInterval'] as const)('%s returns 0 for a malicious string handler', name => {
+      start();
+      expect((window[name] as (handler: string, timeout: number) => number)(MALICIOUS, 0)).toBe(0);
+      expect(blocked.map(event => event.url)).toEqual([name]);
     });
+  });
 
-    it('should intercept Function constructor', () => {
-      const originalFunction = Function;
-      interceptGlobalMethods(mockScriptBlocker);
-      new Function('console.log("test");');
-      expect(mockScriptBlocker.shouldBlockScript).not.toHaveBeenCalled();
-      Function = originalFunction;
-    });
-
-    it('should intercept setTimeout', async () => {
-      interceptGlobalMethods(mockScriptBlocker);
-      await window.setTimeout('console.log("test");', 0);
-      expect(mockScriptBlocker.shouldBlockScript).toHaveBeenCalledWith('setTimeout', 'console.log("test");');
-    });
-
-    it('should block setTimeout when script is blocked', async () => {
-      mockScriptBlocker.shouldBlockScript.mockResolvedValueOnce({ blocked: true, reason: 'Blocked' });
-      interceptGlobalMethods(mockScriptBlocker);
-      const result = await window.setTimeout('console.log("test");', 0);
-      expect(result).toBe(0);
-    });
-
-    it('should intercept setInterval', async () => {
-      interceptGlobalMethods(mockScriptBlocker);
-      await window.setInterval('console.log("test");', 0);
-      expect(mockScriptBlocker.shouldBlockScript).toHaveBeenCalledWith('setInterval', 'console.log("test");');
-    });
-
-    it('should block setInterval when script is blocked', async () => {
-      mockScriptBlocker.shouldBlockScript.mockResolvedValueOnce({ blocked: true, reason: 'Blocked' });
-      interceptGlobalMethods(mockScriptBlocker);
-      const result = await window.setInterval('console.log("test");', 0);
-      expect(result).toBe(0);
-    });
-
-    it('should throw error when XHR is blocked', async () => {
-      mockScriptBlocker.shouldBlockScript.mockResolvedValueOnce({ blocked: true, reason: 'Blocked' });
-      interceptGlobalMethods(mockScriptBlocker);
+  describe('XMLHttpRequest.open', () => {
+    it('opens allowed script URLs synchronously', () => {
+      start();
       const xhr = new XMLHttpRequest();
-      await expect(xhr.open('GET', 'test.js')).rejects.toThrow('Blocked script: Blocked');
+      xhr.open('GET', 'https://trusted.example/app.js');
+      expect(xhr.readyState).toBe(XMLHttpRequest.OPENED);
     });
 
-    it('should throw error when fetch is blocked', async () => {
-      mockScriptBlocker.shouldBlockScript.mockResolvedValueOnce({ blocked: true, reason: 'Blocked' });
-      interceptGlobalMethods(mockScriptBlocker);
-      await expect(window.fetch('test.js')).rejects.toThrow('Blocked script: Blocked');
+    it('throws synchronously for blocked script URLs', () => {
+      start();
+      const xhr = new XMLHttpRequest();
+      expect(() => xhr.open('GET', 'https://evil.example/app.js')).toThrow('Blocked script: Blacklisted script');
     });
   });
-}); 
+
+  describe('fetch', () => {
+    it('rejects blocked script URLs', async () => {
+      start();
+      await expect(window.fetch('https://evil.example/app.js')).rejects.toThrow('Blocked script: Blacklisted script');
+    });
+  });
+
+  describe('script elements', () => {
+    it('runs allowed inline scripts', () => {
+      start();
+      appendScript(script => { script.text = 'window.__ran = "ok";'; });
+      expect((window as any).__ran).toBe('ok');
+    });
+
+    it('does not run malicious inline scripts', () => {
+      start();
+      const script = appendScript(s => { s.text = MALICIOUS; });
+      expect((window as any).__ran).toBeUndefined();
+      expect(script.type).toBe('javascript/blocked');
+      expect(blocked.map(event => event.url)).toEqual(['inline']);
+    });
+
+    it('neutralizes blocked external scripts before insertion', () => {
+      start();
+      const script = appendScript(s => { s.src = 'https://evil.example/tracker.js'; });
+      expect(script.type).toBe('javascript/blocked');
+      expect(blocked.map(event => event.url)).toEqual(['https://evil.example/tracker.js']);
+    });
+
+    it('checks scripts nested inside inserted elements', () => {
+      start();
+      const wrapper = document.createElement('div');
+      const script = document.createElement('script');
+      script.src = 'https://evil.example/nested.js';
+      wrapper.appendChild(script);
+      document.body.append(wrapper);
+      expect(script.type).toBe('javascript/blocked');
+    });
+
+    it('checks only the inserted node, not the reference node', () => {
+      start();
+      const existing = appendScript(s => { s.type = 'text/plain'; s.text = MALICIOUS; });
+      existing.type = '';
+      const fresh = document.createElement('script');
+      fresh.text = 'window.__ran = "fresh";';
+      document.head.insertBefore(fresh, existing);
+      expect(existing.type).toBe('');
+      expect(blocked).toEqual([]);
+    });
+
+    it('leaves non-JavaScript script types alone', () => {
+      start();
+      const script = appendScript(s => { s.type = 'application/ld+json'; s.text = MALICIOUS; });
+      expect(script.type).toBe('application/ld+json');
+      expect(blocked).toEqual([]);
+    });
+  });
+
+  it('stop() restores every patched global and DOM method', () => {
+    const originals = {
+      eval: window.eval,
+      Function: window.Function,
+      setTimeout: window.setTimeout,
+      setInterval: window.setInterval,
+      fetch: window.fetch,
+      open: XMLHttpRequest.prototype.open,
+      appendChild: Node.prototype.appendChild,
+      insertBefore: Node.prototype.insertBefore,
+      append: Element.prototype.append
+    };
+    start();
+    expect(window.eval).not.toBe(originals.eval);
+    interceptor.stop();
+    expect({
+      eval: window.eval,
+      Function: window.Function,
+      setTimeout: window.setTimeout,
+      setInterval: window.setInterval,
+      fetch: window.fetch,
+      open: XMLHttpRequest.prototype.open,
+      appendChild: Node.prototype.appendChild,
+      insertBefore: Node.prototype.insertBefore,
+      append: Element.prototype.append
+    }).toEqual(originals);
+  });
+});
