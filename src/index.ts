@@ -6,7 +6,6 @@
  * @packageDocumentation
  */
 
-import { CacheManager } from './utils/cache-manager';
 import { ScriptBlocker } from './utils/script-blocker';
 import { ScriptInterceptor } from './utils/script-interceptor';
 import {
@@ -58,8 +57,8 @@ export function mergeConfig(defaults: Partial<PageIntegrityConfig>, config?: Par
   };
 }
 
-export function initScriptBlocker(config: PageIntegrityConfig, cacheManager: CacheManager): ScriptBlocker {
-  return new ScriptBlocker(cacheManager, config);
+export function initScriptBlocker(config: PageIntegrityConfig): ScriptBlocker {
+  return new ScriptBlocker(config);
 }
 
 export function exposeGlobally(cls: any, name: string): void {
@@ -74,8 +73,8 @@ export function exposeGlobally(cls: any, name: string): void {
  * Example usage:
  * ```js
  * const pi = new PageIntegrity({
- *   blacklistedHosts: ['evil.com'],
- *   whitelistedHosts: ['trusted.com'],
+ *   blackListedScripts: ['evil.com'],
+ *   whiteListedScripts: ['trusted.com'],
  *   onBlocked: (info) => { ... }
  * });
  * ```
@@ -83,7 +82,6 @@ export function exposeGlobally(cls: any, name: string): void {
 export class PageIntegrity {
   private config: PageIntegrityConfig;
   private scriptBlocker: ScriptBlocker;
-  private cacheManager: CacheManager;
   private scriptInterceptor: ScriptInterceptor;
 
   /**
@@ -92,8 +90,7 @@ export class PageIntegrity {
    */
   constructor(config?: PageIntegrityConfig) {
     this.config = mergeConfig({}, config ?? {});
-    this.cacheManager = new CacheManager();
-    this.scriptBlocker = initScriptBlocker(this.config, this.cacheManager);
+    this.scriptBlocker = initScriptBlocker(this.config);
     this.scriptInterceptor = new ScriptInterceptor(this.scriptBlocker);
     startScriptBlocking({
       scriptInterceptor: this.scriptInterceptor,
@@ -104,11 +101,13 @@ export class PageIntegrity {
 
   /**
    * Update the configuration for script and DOM mutation monitoring.
+   * The current wrappers are removed before the new ones are installed.
    * @param newConfig Partial configuration to merge with the current config.
    */
   public updateConfig(newConfig: Partial<PageIntegrityConfig>): void {
+    this.destroy();
     this.config = mergeConfig(this.config, newConfig);
-    this.scriptBlocker = initScriptBlocker(this.config, this.cacheManager);
+    this.scriptBlocker = initScriptBlocker(this.config);
     this.scriptInterceptor = new ScriptInterceptor(this.scriptBlocker);
     startScriptBlocking({
       scriptInterceptor: this.scriptInterceptor,
@@ -117,7 +116,7 @@ export class PageIntegrity {
   }
 
   /**
-   * Stop script blocking and cleanup resources.
+   * Stop script blocking and restore every patched global and DOM method.
    */
   public destroy(): void {
     stopScriptBlocking({
